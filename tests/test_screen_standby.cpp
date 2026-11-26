@@ -55,7 +55,7 @@ static void fresh() {
   screen_power::saving = screen_power::touching = screen_power::settling = screen_power::was_tap = false;
   screen_power::freeze = [](bool on) { told(on ? "freeze" : "draw"); };
   screen_power::later = [](uint32_t ms) { s.power_wait(ms, now_ms); };
-  screen_power::dark = []() { return s.in_standby() && level == 0; };
+  screen_power::dark = []() { return s.dark(); };
   screen_power::wake = []() { s.wake(now_ms); };
   s = Standby{};
   s.touch(now_ms);
@@ -690,19 +690,19 @@ static void the_sensor_holds_and_lets_go() {
   fresh();
   screen_settings::current.standby_enabled = false;
   s.sensor(Sensor::OFF, Empty::SAVER, 0, now_ms);
-  after(1); s.tick(now_ms); pass(); s.show();
+  after(TOUCH_HOLD_MS); s.tick(now_ms); pass(); s.show();
   assert(s.in_standby());
 }
 
 static void the_empty_room_can_be_dark() {
   fresh();
   s.sensor(Sensor::OFF, Empty::DARK, 0, now_ms);
-  after(1); s.tick(now_ms); pass();
+  after(TOUCH_HOLD_MS); s.tick(now_ms); pass();
   assert(s.in_standby() && has("light 0 in 1500") && !saver_up);
   // A new kind during the sensor standby does not show it again: the level stays until the next standby.
   fresh();
   s.sensor(Sensor::OFF, Empty::SAVER, 0, now_ms);
-  after(1); s.tick(now_ms); pass();
+  after(TOUCH_HOLD_MS); s.tick(now_ms); pass();
   assert(has("light 20 in 1500"));
   trail.clear();
   s.sensor(Sensor::OFF, Empty::DARK, 0, now_ms);
@@ -760,7 +760,7 @@ static void the_sensor_word_lost() {
   // A dark sensor standby stays dark when the word is lost.
   fresh();
   s.sensor(Sensor::OFF, Empty::DARK, 0, now_ms);
-  after(1); s.tick(now_ms); pass();
+  after(TOUCH_HOLD_MS); s.tick(now_ms); pass();
   s.sensor_lost(now_ms); trail.clear(); s.show();
   assert(s.in_standby() && s.by_sensor() && has("light 0 in 1500") && !has("light 20 in 1500"));
 }
@@ -769,10 +769,88 @@ static void the_sensor_respects_what_holds_the_glass() {
   fresh();
   s.sensor(Sensor::OFF, Empty::SAVER, 0, now_ms);
   owners = ALERT;
-  after(10000); s.tick(now_ms);
+  after(TOUCH_HOLD_MS); s.tick(now_ms);
   assert(!s.in_standby());
   owners = 0; s.tick(now_ms); pass();
   assert(s.in_standby());
+}
+
+static void a_dark_sensor_standby_saves_power_at_any_level() {
+  // The dark kind goes to 0 whatever the standby level is, and a screen at 0 saves power: the answer is the standby's.
+  fresh();
+  level = 20;
+  s.sensor(Sensor::OFF, Empty::DARK, 60000, now_ms);
+  after(60000); s.tick(now_ms); pass();
+  assert(s.in_standby() && s.dark() && has("light 0 in 1500"));
+  after(screen_power::REST_MS);
+  assert(screen_power::saving && has("freeze"));
+  // The screensaver kind at a level of 20 is not dark.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  after(60000); s.tick(now_ms); pass();
+  assert(s.in_standby() && !s.dark() && s.level_now() == 20);
+  after(screen_power::REST_MS);
+  assert(!screen_power::saving);
+}
+
+static void the_clock_wraps() {
+  // Thirty days with the sensor off: a touch still holds the screen lit for the delay.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  after(60000); s.tick(now_ms); pass();
+  assert(s.in_standby());
+  after(30u * 24 * 3600 * 1000); s.wake(now_ms); s.touch(now_ms);
+  after(1000); s.tick(now_ms);
+  assert(!s.in_standby());
+  after(58999); s.tick(now_ms);
+  assert(!s.in_standby());
+  after(1000); s.tick(now_ms); pass();
+  assert(s.in_standby());
+  // A standby by hand thirty days after the turn to off: the first on is held, as the delay since the standby says.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  after(30u * 24 * 3600 * 1000);
+  s.standby_by_hand("Home Assistant's Sleep", now_ms); pass();
+  after(1000); s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
+  assert(s.in_standby() && logged("Wake from the sensor held: standby by hand"));
+}
+
+static void a_touch_holds_an_empty_room_lit() {
+  // A delay of 0: a touch keeps the screen lit for TOUCH_HOLD_MS, then standby.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::SAVER, 0, now_ms);
+  after(TOUCH_HOLD_MS); s.tick(now_ms); pass();
+  assert(s.in_standby());
+  s.wake(now_ms); s.touch(now_ms);
+  after(29000); s.tick(now_ms);
+  assert(!s.in_standby());
+  after(1000); s.tick(now_ms); pass();
+  assert(s.in_standby());
+  // A delay longer than the hold keeps the rule of the delay from the touch.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  after(60000); s.touch(now_ms);
+  after(59999); s.tick(now_ms);
+  assert(!s.in_standby());
+  after(1); s.tick(now_ms); pass();
+  assert(s.in_standby());
+}
+
+static void sleep_on_a_dark_room_stays_dark() {
+  // Home Assistant's Sleep on a dark sensor standby: it becomes a standby by hand and stays at 0.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::DARK, 60000, now_ms);
+  after(60000); s.tick(now_ms); pass();
+  assert(s.in_standby() && has("light 0 in 1500"));
+  trail.clear();
+  s.standby_by_hand("Home Assistant's Sleep", now_ms); pass();
+  assert(s.in_standby() && s.by_hand() && s.dark() && has("light 0 in 1500") && !has("light 20 in 1500"));
+  // Lit again, the next Sleep on a lit screen goes to the standby level.
+  s.wake(now_ms);
+  s.standby_by_hand("Home Assistant's Sleep", now_ms); pass();
+  assert(s.in_standby() && !s.dark() && has("light 20 in 1500"));
 }
 
 int main() {
@@ -795,5 +873,9 @@ int main() {
   a_standby_by_hand_and_the_sensor();
   the_sensor_word_lost();
   the_sensor_respects_what_holds_the_glass();
+  a_dark_sensor_standby_saves_power_at_any_level();
+  the_clock_wraps();
+  a_touch_holds_an_empty_room_lit();
+  sleep_on_a_dark_room_stays_dark();
   std::puts("screen_standby ok");
 }

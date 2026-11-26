@@ -1330,12 +1330,15 @@ class LiveTiles(unittest.TestCase):
             self.assertNotIn('dim_level(', path.read_text(), f'{path.relative_to(ROOT)}: a dimmed screen\'s level is '
                              'runtime_tiles::standby_level(), the one camera_view::tiles_seen is asked with')
         standby = (ROOT / 'components/smart_display/screen_standby.h').read_text()
-        self.assertIn('const int level = dimmed_ ? glass.standby_level() : static_cast<int>(screen_settings::current.brightness);',
-                      standby)
+        # level_now() is the standby's one answer (a sensor's dark standby is at 0 whatever the standby level), and
+        # what is seen in standby asks it too (runtime_tiles::glass_level).
+        self.assertIn('return dark_ ? 0 : glass.standby_level();', standby)
+        self.assertIn('const int level = level_now();', standby)
         self.assertNotIn('dim_level(', standby)
         core = (PACKAGES / 'core.yaml').read_text()
         self.assertIn('glass.standby_level = []() { return runtime_tiles::standby_level(); };', core)
         self.assertEqual(core.count('glass.standby_level ='), 1)
+        self.assertIn('runtime_tiles::glass_level = []() { return screen_standby::the().level_now(); };', core)
 
     def test_a_media_tile_may_show_its_cover_in_the_icons_place(self):
         from core import COVER_TILE_MIN_FIRMWARE, resolve_controls

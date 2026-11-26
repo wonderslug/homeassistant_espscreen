@@ -371,7 +371,12 @@ inline int minute_of_day() {
 // (apply_screen_settings) and what is seen in standby (tiles_seen) both go by it (firmware 0.40.0+).
 inline int standby_level() { return screen_settings::current.dim_level(minute_of_day()); }
 // The tiles are there to be seen, so their pictures load (camera_view::tiles_seen, firmware 0.40.0+).
-inline bool tiles_seen() { return camera_view::tiles_seen(awake(), saver_root || saver_camera, standby_level()); }
+// The backlight's level of now, the standby's own answer (screen_standby::level_now, bound in packages/core.yaml): a
+// sensor's dark standby is at 0 whatever the standby level is. Unbound (the host render), the standby level.
+inline int (*glass_level)() = nullptr;
+inline bool tiles_seen() {
+  return camera_view::tiles_seen(awake(), saver_root || saver_camera, glass_level ? glass_level() : standby_level());
+}
 inline void tick();
 inline void refresh_tile(size_t index, redraw_log::TileWhy why = redraw_log::TileWhy::unnamed);
 // Style setters that only touch a property when it changes (defined with the card renderers below).

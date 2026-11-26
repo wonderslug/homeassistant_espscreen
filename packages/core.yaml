@@ -180,6 +180,7 @@ esphome:
           runtime_tiles::firmware_version = "${SCREEN_FIRMWARE_VERSION}";
           runtime_tiles::now_time = []() { return id(homeassistant_time).now(); };
           runtime_tiles::screen_awake = []() { return !screen_standby::the().in_standby(); };
+          runtime_tiles::glass_level = []() { return screen_standby::the().level_now(); };
           // The screensaver (firmware 0.29.0+): a new word from ESP Screens in standby sets the level and the glass again.
           runtime_tiles::saver_changed = []() { id(apply_screen_settings).execute(false); };
           runtime_tiles::mini_icon_font = id(materialdesign_icons_mini)->get_lv_font();
@@ -369,7 +370,7 @@ esphome:
           // Saving power while the glass is dark (screen_power.h): LVGL pauses, and Wi-Fi dozes.
           screen_power::freeze = [](bool on) { id(screen_lvgl).set_paused(on, false); ESP_LOGI("power", on ? "dark: saving" : "awake"); };
           screen_power::later = [](uint32_t ms) { screen_standby::the().power_wait(ms, millis()); };
-          screen_power::dark = []() { return screen_standby::the().in_standby() && runtime_tiles::standby_level() == 0; };
+          screen_power::dark = []() { return screen_standby::the().dark(); };
           screen_power::wake = []() { screen_standby::the().wake(millis()); };
           // Feedback a finger hears or feels (touch_feedback.h): none for the push that wakes a dimmed screen, nor in a calibration.
           touch_feedback::quiet = []() { return screen_standby::the().in_standby() || id(calibration_active); };
@@ -1691,7 +1692,7 @@ sensor:
     lambda: |-
       #ifdef USE_ESP32
         if (!heap_caps_get_total_size(MALLOC_CAP_SPIRAM)) return 0;
-        if (!screen_standby::the().in_standby() || runtime_tiles::standby_level() != 0) return {};
+        if (!screen_standby::the().dark()) return {};
         return heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
       #else
         return 0;
