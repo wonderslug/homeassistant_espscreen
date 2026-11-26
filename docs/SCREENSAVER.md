@@ -54,13 +54,12 @@ A screen can follow a presence sensor instead of the clock alone: it stays lit w
 to standby a little after the room is empty. It needs an app from the next release and firmware that lists
 `sensor_standby`, on a board that goes into standby.
 
-1. In the **Screensaver** card, open the row **Standby from a sensor** and choose a sensor under **Sensor**. It can be a
-   `binary_sensor` such as `binary_sensor.hall_presence`, an `input_boolean` or a `switch`. The row's line then reads,
-   for example, "Hall presence · Screensaver after 1 min". **Remove the sensor** turns it off again.
-2. Under **When it turns off** choose what the empty room shows: **Screensaver** (the standby as it always was, with
-   the screensaver if it is on) or **Screen off** (the glass goes dark).
-3. Under **After** choose how long the screen waits once the sensor is off: **Right away**, 15 s, 30 s, 1 min, 2 min,
-   5 min or 10 min.
+1. In the **Standby** card of the screen's settings, under **Sensor**, choose a sensor. It can be a `binary_sensor`
+   such as `binary_sensor.hall_presence`, an `input_boolean` or a `switch`. **Remove the sensor** turns it off again.
+2. Under **Standby when it turns off** choose how long the screen waits once the sensor is off: **Right away**, 15 s,
+   30 s, 1 min, 2 min, 5 min or 10 min.
+3. **Screen off** chooses what the empty room shows: off, the standby as it always was, with the screensaver if it is
+   on; on, the glass goes dark.
 
 While the sensor is on, the screen stays lit, however long nobody touches it. When the sensor turns off, the screen
 goes to standby after the delay, counted from the turn to off or the last touch, whichever is later. This works with

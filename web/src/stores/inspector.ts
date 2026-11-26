@@ -21,8 +21,6 @@ export type Inspector =
   | { kind: "bar-add" }
   | { kind: "saver-item"; index: number }
   | { kind: "saver-add" }
-  // Standby from a sensor (SaverSensorInspector).
-  | { kind: "saver-sensor" }
   | { kind: "saver"; step: SaverStep }
   | { kind: "page"; id: string }
   // A section of a page (docs/PAGES.md "Sections"): its title, icon, summary and size (SectionInspector).
@@ -155,11 +153,6 @@ export const useInspectorStore = defineStore("inspector", () => {
     doc.selectedTileId = null;
     inspector.value = { kind: "saver", step };
   }
-  function openSaverSensor() {
-    iconPickerOpen.value = false; back.value = null;
-    doc.selectedTileId = null;
-    inspector.value = { kind: "saver-sensor" };
-  }
   function openSaverAdd() {
     iconPickerOpen.value = false; back.value = null;
     doc.selectedTileId = null;
@@ -243,6 +236,6 @@ export const useInspectorStore = defineStore("inspector", () => {
     // What the mockup reads as it draws (stores/lookup.ts).
     ...lookups({ previewed }),
     back, pagePart, goBack, escape,
-    forgetCell, openTile, openPage, openBar, openBarAdd, openSaverItem, openSaverStep, openSaverAdd, openSaverSensor, closeInspector,
+    forgetCell, openTile, openPage, openBar, openBarAdd, openSaverItem, openSaverStep, openSaverAdd, closeInspector,
   };
 });

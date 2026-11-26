@@ -7,6 +7,7 @@ import { t } from "../i18n";
 import FeedbackPanel from "./FeedbackPanel.vue";
 import GridSettings from "./GridSettings.vue";
 import ScreensaverCard from "./ScreensaverCard.vue";
+import SensorStandbyRows from "./SensorStandbyRows.vue";
 import SettingRows from "./SettingRows.vue";
 import PartHead from "./parts/PartHead.vue";
 import PartList from "./parts/PartList.vue";
@@ -159,6 +160,8 @@ const flipDark = () => settings.setSetting("dark_mode", !values.value.dark_mode,
           <section class="set-card">
             <h4>{{ t(`editor.screen_settings.blocks.${block.block}`) }}</h4>
             <SettingRows :keys="block.keys" />
+            <!-- Standby from a sensor (docs/SCREENSAVER.md): three rows of the card that turns standby on. -->
+            <SensorStandbyRows v-if="block.block === 'standby'" />
           </section>
           <!-- The screensaver (app 0.4.48) is what standby shows, so it stands right after the rows that turn standby on. -->
           <ScreensaverCard v-if="block.block === 'standby'" />

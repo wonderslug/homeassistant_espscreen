@@ -34,10 +34,6 @@ const order = computed(() => steps.live.value || screensaver.stepsShown(null));
 const opened = (kind: SaverStep) => (insp.inspector?.kind === "saver" && insp.inspector.step === kind)
   || (kind === "clock" && (insp.inspector?.kind === "saver-item" || insp.inspector?.kind === "saver-add"));
 const line = (kind: SaverStep) => (screensaver.isOn(kind) ? screensaver.summary(kind) : { text: t("editor.screen_settings.screensaver.summary.off"), missing: false });
-const sensorLine = computed(() => screensaver.sensorSummary());
-function openSensor() {
-  if (screensaver.saver?.sensor_ready) insp.openSaverSensor();
-}
 function open(e: MouseEvent, kind: SaverStep) {
   if (steps.click(e) || (e.target as HTMLElement).closest(".ui-switch")) return;
   insp.openSaverStep(kind);
@@ -57,19 +53,6 @@ function open(e: MouseEvent, kind: SaverStep) {
     </div>
     <p v-if="!screensaver.saverReady" class="hint" id="screensaver-firmware">{{ t("editor.screen_settings.screensaver.needs_firmware", { version: SAVER_MIN_FIRMWARE }) }}</p>
     <p v-else-if="!screensaver.saverReachable" class="hint">{{ t("editor.screen_settings.screensaver.standby_off") }}</p>
-    <!-- Standby from a sensor (docs/SCREENSAVER.md): one row above the steps, which opens its drawer; not a step, so it neither drags nor switches. -->
-    <div class="saver-list sensor-list">
-      <div class="sensor-row" tabindex="0" role="button" data-setting="saver-sensor" :class="{ inactive: !screensaver.saver.sensor_ready, opened: insp.inspector?.kind === 'saver-sensor' }"
-        :aria-disabled="!screensaver.saver.sensor_ready" @click="openSensor" @keydown.enter.self.prevent="openSensor">
-        <span class="saver-av" aria-hidden="true"><span class="mdi saver-glyph">{{ glyph("F0D91") }}</span></span>
-        <span class="saver-tx">
-          <b>{{ t("editor.screen_settings.screensaver.sensor.title") }}</b>
-          <small :class="{ missing: sensorLine.missing }">{{ sensorLine.text }}</small>
-        </span>
-        <Icon name="chevron-right" class="saver-chev" />
-      </div>
-    </div>
-    <p v-if="!screensaver.saver.sensor_ready" class="hint" id="saver-sensor-firmware">{{ t("editor.screen_settings.screensaver.sensor.needs_firmware") }}</p>
     <template v-if="screensaver.saverReady && screensaver.saver.show">
       <p class="saver-caption">{{ pictures ? t("editor.screen_settings.screensaver.lead") : t("editor.screen_settings.screensaver.no_pictures") }}</p>
       <div class="saver-list" id="screensaver-steps" role="list" :aria-label="t('editor.screen_settings.screensaver.lead')">
@@ -109,13 +92,11 @@ function open(e: MouseEvent, kind: SaverStep) {
 .saver-caption { margin: 10px 0 6px; color: var(--muted); font-size: 11.5px; }
 /* One grouped list, as a settings app draws a list that leads further: rows apart by a hairline, the whole in one frame. */
 .saver-list { display: grid; grid-template-columns: minmax(0, 1fr); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 10px; }
-.sensor-list { margin-top: 10px; }
-.sensor-row.inactive { opacity: 0.6; cursor: default; }
-.saver-row, .sensor-row { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 9px 8px 9px 9px; background: var(--surface); cursor: pointer; outline: none; transition: background 0.12s; }
+.saver-row { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 9px 8px 9px 9px; background: var(--surface); cursor: pointer; outline: none; transition: background 0.12s; }
 .saver-row + .saver-row { border-top: 1px solid var(--line); }
-.saver-row:hover, .sensor-row:not(.inactive):hover { background: var(--surface-2); }
-.saver-row:focus-visible, .sensor-row:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
-.saver-row.opened, .sensor-row.opened { background: var(--accent-soft); }
+.saver-row:hover { background: var(--surface-2); }
+.saver-row:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.saver-row.opened { background: var(--accent-soft); }
 .saver-row.dragging { background: var(--accent-soft); cursor: grabbing; position: relative; z-index: 1; box-shadow: 0 6px 18px rgba(20, 24, 40, 0.14); }
 .saver-av { position: relative; width: 28px; height: 28px; border-radius: 8px; background: var(--seg); color: var(--ink-2); display: grid; place-items: center; flex: none; font-size: 16px; }
 .saver-av > * { grid-area: 1 / 1; transition: opacity 0.12s; }

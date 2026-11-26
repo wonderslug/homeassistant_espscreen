@@ -10,7 +10,6 @@ import TileInspector from "./TileInspector.vue";
 import TopbarInspector from "./TopbarInspector.vue";
 import SaverClock from "./SaverClock.vue";
 import SaverInspector from "./SaverInspector.vue";
-import SaverSensorInspector from "./SaverSensorInspector.vue";
 import InspectPanel from "./InspectPanel.vue";
 import SectionInspector from "./SectionInspector.vue";
 import PageInspector from "./PageInspector.vue";
@@ -63,7 +62,6 @@ function resizeKey(event: KeyboardEvent) {
       <!-- The screensaver's clock, its entities and its +: one inspector, so the clock's row at its head stays where it is. -->
       <SaverClock v-else-if="insp.inspector.kind === 'saver-item' || insp.inspector.kind === 'saver-add' || (insp.inspector.kind === 'saver' && insp.inspector.step === 'clock')"
         :index="insp.inspector.kind === 'saver-item' ? insp.inspector.index : -1" :adding="insp.inspector.kind === 'saver-add'" />
-      <SaverSensorInspector v-else-if="insp.inspector.kind === 'saver-sensor'" />
       <SaverInspector v-else-if="insp.inspector.kind === 'saver'" :key="insp.inspector.step" :step="insp.inspector.step" />
       <PageInspector v-else-if="insp.inspector.kind === 'page'" :id="insp.inspector.id" />
       <SectionInspector v-else-if="insp.inspector.kind === 'section'" :key="insp.inspector.id" :id="insp.inspector.id" />

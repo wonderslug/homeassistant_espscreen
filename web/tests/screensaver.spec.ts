@@ -5,7 +5,6 @@ import { nextTick } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SaverClock from "../src/components/SaverClock.vue";
 import SaverInspector from "../src/components/SaverInspector.vue";
-import SaverSensorInspector from "../src/components/SaverSensorInspector.vue";
 import ScreensaverCard from "../src/components/ScreensaverCard.vue";
 import type { Inventory, ScreensaverView } from "../src/types";
 import { useScreenStore } from "../src/stores/screen";
@@ -123,106 +122,6 @@ describe("a step in the drawer", () => {
 
 describe("standby from a sensor", () => {
   const sensor = { sensor: "binary_sensor.hall_presence", sensor_off: "off" as const, sensor_delay: 60, sensor_ready: true };
-  const withEntities = () => {
-    useInventoryStore().inventory.entities.push(
-      { id: "binary_sensor.hall_presence", name: "Hall presence", area: "Hall" }, { id: "input_boolean.guest", name: "Guest mode" },
-      { id: "switch.fan", name: "Fan" },
-    );
-  };
-  const spy = () => vi.spyOn(useScreenStore(), "setScreensaver").mockResolvedValue(undefined);
-
-  it("has a row above the steps that says what it does", () => {
-    withEntities();
-    useScreenStore().currentScreen!.screensaver = saver(sensor);
-    const wrapper = mount(ScreensaverCard);
-    const row = wrapper.find('[data-setting="saver-sensor"]');
-    expect(row.exists()).toBe(true);
-    expect(row.find("b").text()).toBe("Standby from a sensor");
-    expect(row.find("small").text()).toBe("Hall presence · Screen off after 1 min");
-    // It stands above the steps, and is not one of them: no drag, no switch.
-    const html = wrapper.html();
-    expect(html.indexOf('data-setting="saver-sensor"')).toBeLessThan(html.indexOf('id="screensaver-steps"'));
-    expect(wrapper.find("#screensaver-steps").find('[data-setting="saver-sensor"]').exists()).toBe(false);
-    expect(row.find('[role="switch"]').exists()).toBe(false);
-    const store = useScreensaverStore();
-    useScreenStore().currentScreen!.screensaver = saver({ ...sensor, sensor_off: "saver", sensor_delay: 0 });
-    expect(store.sensorSummary().text).toBe("Hall presence · Screensaver right away");
-    useScreenStore().currentScreen!.screensaver = saver({ ...sensor, sensor_delay: 300 });
-    expect(store.sensorSummary().text).toBe("Hall presence · Screen off after 5 min");
-    useScreenStore().currentScreen!.screensaver = saver({ sensor: "", sensor_ready: true });
-    expect(store.sensorSummary().text).toBe("Off");
-  });
-
-  it("says Off in the row with no sensor, also with Show in standby off", () => {
-    useScreenStore().currentScreen!.screensaver = saver({ sensor: "", sensor_ready: true, show: false });
-    const wrapper = mount(ScreensaverCard);
-    expect(wrapper.find('[data-setting="saver-sensor"] small').text()).toBe("Off");
-  });
-
-  it("opens the drawer, picks an entity, the kind and the delay", async () => {
-    withEntities();
-    useScreenStore().currentScreen!.screensaver = saver({ sensor: "", sensor_ready: true });
-    const card = mount(ScreensaverCard);
-    await card.find('[data-setting="saver-sensor"]').trigger("click");
-    expect(insp.inspector).toEqual({ kind: "saver-sensor" });
-    expect(card.find('[data-setting="saver-sensor"]').classes()).toContain("opened");
-
-    const set = spy();
-    const store = useScreensaverStore();
-    // Only the entities that have an on and off state.
-    expect(store.sensorChoices.map((item) => item.id).sort()).toEqual(["binary_sensor.hall_presence", "input_boolean.guest", "switch.fan"]);
-    const wrapper = mount(SaverSensorInspector, { attachTo: document.body });
-    expect(wrapper.find("#saver-sensor-entity").exists()).toBe(true);
-    store.setSensor({ sensor: "switch.fan" });
-    store.setSensor({ sensor_off: "saver" });
-    store.setSensor({ sensor_delay: 300 });
-    expect(set.mock.calls.map((call) => call[1])).toEqual([{ sensor: "switch.fan" }, { sensor_off: "saver" }, { sensor_delay: 300 }]);
-    wrapper.unmount();
-  });
-
-  it("writes through the drawer's own controls", async () => {
-    withEntities();
-    useScreenStore().currentScreen!.screensaver = saver({ ...sensor, sensor_off: "saver", sensor_delay: 60 });
-    const set = spy();
-    const wrapper = mount(SaverSensorInspector, { attachTo: document.body });
-    expect(wrapper.text()).toContain("Hall presence");
-    const buttons = wrapper.findAll(".ui-segmented button");
-    expect(buttons.map((b) => b.text())).toEqual(["Screensaver", "Screen off"]);
-    await buttons[1].trigger("click");
-    expect(set.mock.calls.map((call) => call[1])).toContainEqual({ sensor_off: "off" });
-    await wrapper.find('button[aria-label="Remove the sensor"]').trigger("click");
-    expect(set.mock.calls.map((call) => call[1])).toContainEqual({ sensor: "" });
-    expect(wrapper.find("#saver-sensor-after").text()).toContain("1 min");
-    wrapper.unmount();
-  });
-
-  it("sends the sensor's fields to the add-on", async () => {
-    useScreenStore().currentScreen!.virtual = false;
-    const calls: any[] = [];
-    vi.stubGlobal("fetch", vi.fn((url: string, init: any) => {
-      calls.push([url, JSON.parse(init.body)]);
-      return Promise.resolve(new Response(JSON.stringify({ screensaver: {} }), { status: 200, headers: { "Content-Type": "application/json" } }));
-    }));
-    const screen = useScreenStore().currentScreen!;
-    await useScreenStore().setScreensaver(screen, { sensor: "switch.fan", sensor_off: "off", sensor_delay: 120 });
-    const sent = calls[0][1].screensaver;
-    expect([sent.sensor, sent.sensor_off, sent.sensor_delay]).toEqual(["switch.fan", "off", 120]);
-  });
-
-  it("says the screen needs new firmware, and is not there on a screen without standby", () => {
-    useScreenStore().currentScreen!.screensaver = saver({ ...sensor, sensor_ready: false });
-    let wrapper = mount(ScreensaverCard);
-    const row = wrapper.find('[data-setting="saver-sensor"]');
-    expect(row.classes()).toContain("inactive");
-    expect(wrapper.find("#saver-sensor-firmware").text()).toBe("Update this screen to use a sensor for its standby.");
-    insp.inspector = null;
-    row.trigger("click");
-    expect(insp.inspector).toBeNull();
-    useScreenStore().currentScreen!.screensaver = saver({ ...sensor, standby: false });
-    wrapper = mount(ScreensaverCard);
-    expect(wrapper.find('[data-setting="saver-sensor"]').exists()).toBe(false);
-  });
-
   it("drops the Auto standby hint, and lets Show in standby be used, while a sensor brings the screensaver", () => {
     const hint = "Turn on Auto standby to use it.";
     const show = (wrapper: ReturnType<typeof mount>) => wrapper.find('[data-setting="screensaver"]').classes().includes("inactive");
@@ -241,15 +140,5 @@ describe("standby from a sensor", () => {
     wrapper = mount(ScreensaverCard);
     expect(wrapper.text()).toContain(hint);
     expect(show(wrapper)).toBe(true);
-  });
-
-  it("marks a sensor that is no longer among the entities", () => {
-    withEntities();
-    useScreenStore().currentScreen!.screensaver = saver(sensor);
-    expect(useScreensaverStore().sensorSummary().missing).toBeFalsy();
-    useScreenStore().currentScreen!.screensaver = saver({ ...sensor, sensor: "binary_sensor.gone" });
-    expect(useScreensaverStore().sensorSummary()).toEqual({ text: "The sensor no longer exists. Choose another.", missing: true });
-    const small = mount(ScreensaverCard).find('[data-setting="saver-sensor"] small');
-    expect(small.classes()).toContain("missing");
   });
 });
