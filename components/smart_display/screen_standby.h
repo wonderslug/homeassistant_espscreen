@@ -23,15 +23,18 @@
 // A third way in and out, from a sensor (sensor()): an on and off entity the add-on follows and tells the screen, as a
 // word of three, on, off or unknown (Sensor), with what an empty room shows (Empty: the screensaver or the dark) and a
 // delay. On wakes the screen and lets Auto standby's time run, as with no word, and its standby is an ordinary one
-// (never the dark kind, never the sensor's). Off sends it to standby one delay after the later of the turn to off and the last touch, with Auto standby on or off; a touch holds it lit at least TOUCH_HOLD_MS, so a
-// delay of 0 leaves someone the time to use it. The next on wakes it at once, and a standby by hand
-// only when the sensor was off for the whole delay since that standby began, so someone walking away from the glass
-// they just put to sleep does not light it again (the quiet of a sensed wake is not used for this one). The first word
-// after unknown is no turn. The word lost (sensor_lost(), or the add-on's feed gone quiet, Glass::app_alive) is unknown
-// again: a lit screen counts the standby time from then, a standby stays as it is. A sensor standby of the dark kind
-// goes to level 0, and a standby by hand asked on it (Home Assistant's Sleep) stays there. Every clock is compared as
-// elapsed time, so the wrap of millis() after 49 days changes nothing. dark() and level_now() are the one answer to
-// how lit the glass is: show(), the power saving and what is seen in standby (packages/core.yaml) go by them.
+// (never the dark kind, never the sensor's). Off sends it to standby one delay after the later of the turn to off and
+// the last touch, with Auto standby on or off; a touch holds it lit at least TOUCH_HOLD_MS, so a delay of 0 leaves
+// someone the time to use it. With the dark kind (Screen off), a standby of the timer that began with someone there
+// goes dark by the same rule, where it is (darken(): no page 1, no cards closing again); a standby by hand keeps its
+// level. The next on wakes it at once, and a standby by hand only when the sensor was off for the whole delay since
+// that standby began, so someone walking away from the glass they just put to sleep does not light it again (the
+// quiet of a sensed wake is not used for this one). The first word after unknown is no turn. The word lost
+// (sensor_lost(), or the add-on's feed gone quiet, Glass::app_alive) is unknown again: a lit screen counts the standby
+// time from then, a standby stays as it is. A sensor standby of the dark kind goes to level 0, and a standby by hand
+// asked on it (Home Assistant's Sleep) stays there. Every clock is compared as elapsed time, so the wrap of millis()
+// after 49 days changes nothing. dark() and level_now() are the one answer to how lit the glass is: show(), the power
+// saving and what is seen in standby (packages/core.yaml) go by them.
 //
 // Every standby shows the screensaver while the backlight is still lit (show(), a level above 0), a standby by hand
 // too. It opens last: the cards close and page 1 comes first, and from inside the API's call (Home Assistant's Sleep)
@@ -95,7 +98,8 @@ struct Glass {
   bool (*away)() = []() { return false; };            // a card, the settings page or another page than page 1 is up
   uint32_t (*home_after)() = []() -> uint32_t { return 0; };  // Back to page 1 after so many seconds; 0: off
   int (*standby_level)() = []() { return 0; };        // the backlight's level in standby now (night or day)
-  bool (*app_alive)() = []() { return true; };        // the add-on's feed is alive (a sensor's word is believed only then)
+  // The add-on's feed is alive: a sensor's word is believed only then.
+  bool (*app_alive)() = []() { return true; };
 
   void (*light)(int, int) = [](int, int) {};          // the backlight to a level (percent), over so many ms
   void (*overlay)(bool) = [](bool) {};                // the sheet over a screen in standby that takes the waking tap
@@ -144,7 +148,8 @@ class Standby {
 
   // ---- the glass follows the state ----
   // The backlight, the power saving of a dark screen, the sheet that takes the waking tap and, last, the screensaver.
-  // Auto standby turned off lights a screen the time dimmed, never one someone sent to standby by hand or one the sensor started.
+  // Auto standby turned off lights a screen the time dimmed, never one someone sent to standby by hand or one the
+  // sensor started.
   void show() {
     if (dimmed_ && !screen_settings::current.standby_enabled && !hand_ && !by_sensor_) dimmed_ = false;
     const int level = level_now();
@@ -209,7 +214,9 @@ class Standby {
     page_1_when_due(now);
   }
   // The same for a caller that has only a yes or no on "this senses someone" (kind_of).
-  void wake_from(const char *source, Asker who, bool sensed, uint32_t now) { wake_from(source, kind_of(who, sensed), now); }
+  void wake_from(const char *source, Asker who, bool sensed, uint32_t now) {
+    wake_from(source, kind_of(who, sensed), now);
+  }
 
   // ---- page 1 ----
   // Page 1 from the loop's next pass, never at the bottom of the call that asked (the API's): the latest ask wins.
@@ -289,7 +296,8 @@ class Standby {
   // ---- time ----
   // Every second: the standby time ran out (Auto standby on, and no finger, calibration, alert or doorbell's ring
   // holds the screen lit), and Back to page 1. With the sensor's word off the sensor decides instead (on counts
-  // like unknown): off sends it to standby one delay after the later of the turn and the last touch (Auto standby on or off).
+  // like unknown): off sends it to standby one delay after the later of the turn and the last touch (Auto standby on
+  // or off), and with Screen off darkens a standby of the timer.
   void tick(uint32_t now) {
     const auto &settings = screen_settings::current;
     if (sensor_ != Sensor::UNKNOWN && !glass.app_alive()) sensor_lost(now);
@@ -297,6 +305,8 @@ class Standby {
       // Elapsed times, never timestamps compared: they hold across the wrap of the clock (49 days).
       const bool empty = now - off_at_ >= delay_ms_ && now - last_touch_ >= std::max(delay_ms_, TOUCH_HOLD_MS);
       if (!dimmed_ && !finger_ && !glass.owned() && empty) enter(false, now, true);
+      // Screen off: a timer standby that began with someone there goes dark once the room is empty, in place.
+      else if (dimmed_ && !hand_ && !by_sensor_ && empty_ == Empty::DARK && empty) darken();
     } else if (settings.standby_enabled && !dimmed_ && !finger_ && !glass.owned() &&
         now - last_touch_ > static_cast<uint32_t>(settings.standby_seconds) * 1000UL) {
       enter(false, now);
@@ -352,6 +362,13 @@ class Standby {
     glass.close_settings();
     glass.close_cards();
     glass.page_1();
+  }
+
+  // A standby of the timer becomes the sensor's dark one where it is: no page 1, no cards closing again.
+  void darken() {
+    glass.say("Screen off from the sensor: the room is empty");
+    by_sensor_ = dark_ = true;
+    show();
   }
 
   // The settings page and every card close; with Back to page 1 on standby the screen goes home too, one pass later

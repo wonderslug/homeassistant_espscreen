@@ -734,6 +734,43 @@ static void the_empty_room_can_be_dark() {
   s.sensor(Sensor::OFF, Empty::DARK, 60000, now_ms);
   s.standby_by_hand("Home Assistant's Sleep", now_ms); pass();
   assert(has("light 20 in 1500"));
+  // Screen off on: a timer standby that began with someone there goes dark once the room is empty for the delay,
+  // without page 1 or the cards closing again.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::DARK, 60000, now_ms);
+  s.sensor(Sensor::ON, Empty::DARK, 60000, now_ms);
+  after(600 * 1000 + 1); s.tick(now_ms); pass();
+  assert(s.in_standby() && !s.by_sensor() && has("light 20 in 1500"));
+  trail.clear();
+  s.sensor(Sensor::OFF, Empty::DARK, 60000, now_ms);
+  after(59999); s.tick(now_ms); pass();
+  assert(!s.dark() && trail.empty());
+  after(1); s.tick(now_ms); pass();
+  assert(s.dark() && s.by_sensor() && has("light 0 in 1500") && !saver_up);
+  assert(!has("page 1") && !has("close cards") && !has("close settings"));
+  trail.clear(); after(1000); s.tick(now_ms);
+  assert(trail.empty());
+  // The turn to on wakes it as any sensor standby.
+  s.sensor(Sensor::ON, Empty::DARK, 60000, now_ms);
+  assert(!s.in_standby());
+  // Screen off off: the timer standby stays at the standby level.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
+  after(600 * 1000 + 1); s.tick(now_ms); pass();
+  trail.clear();
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  after(60000); s.tick(now_ms); pass();
+  assert(s.in_standby() && !s.by_sensor() && s.level_now() == 20 && trail.empty());
+  // A standby by hand is not darkened by the empty room: Sleep keeps its own level.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::DARK, 60000, now_ms);
+  s.sensor(Sensor::ON, Empty::DARK, 60000, now_ms);
+  s.standby_by_hand("Home Assistant's Sleep", now_ms); pass();
+  trail.clear();
+  s.sensor(Sensor::OFF, Empty::DARK, 60000, now_ms);
+  after(60000); s.tick(now_ms); pass();
+  assert(s.in_standby() && s.by_hand() && !s.dark() && s.level_now() == 20 && trail.empty());
 }
 
 static void a_standby_by_hand_and_the_sensor() {
@@ -769,11 +806,12 @@ static void the_sensor_word_lost() {
   s.standby_by_time(now_ms); pass();
   s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
   assert(!s.in_standby() && logged("Wake from the sensor, screen in standby"));
-  // A lit screen held by on falls back to the timer, counted from the loss, not from the last touch.
+  // A lit screen with the word on falls back to the timer, counted from the loss, not from the last touch.
   fresh();
   s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
   s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
-  after(3600 * 1000);
+  after(300 * 1000); s.tick(now_ms);
+  assert(!s.in_standby());
   alive = false; s.tick(now_ms);
   assert(s.sensor_word() == Sensor::UNKNOWN && !s.in_standby() && touch_at() == now_ms);
   after(600 * 1000 + 1); s.tick(now_ms); pass();

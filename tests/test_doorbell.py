@@ -294,8 +294,9 @@ int main() {{
         self.assertIn('(alert_life::the().up() ? screen_standby::ALERT : 0)', owned[1])
         self.assertIn('(runtime_tiles::doorbell_holds() ? screen_standby::RING : 0)', owned[1])
         standby = (ROOT / 'components/smart_display/screen_standby.h').read_text()
-        self.assertEqual(len(re.findall(r'glass\.owned\(\)(?! & )', standby)), 3,
-                         'the standby time, Back to page 1 and the home key held wait for any owner of the glass')
+        self.assertEqual(len(re.findall(r'glass\.owned\(\)(?! & )', standby)), 4,
+                         'the standby time, the sensor\'s standby, Back to page 1 and the home key held wait for any '
+                         'owner of the glass')
         self.assertNotIn('& ALERT', standby, 'no rule of the standby waits for an alert alone')
         # A guard a package still writes itself that waits while an alert shows waits while a ring shows too.
         for path in package_yaml.files():
