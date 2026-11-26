@@ -8,6 +8,7 @@
 // takes some 30 KB out of main.cpp. docs/RELEASING.md tells how to recognise the limit.
 #include "esphome/core/log.h"
 #include "runtime_tiles.h"
+#include "screen_standby.h"
 
 #include <memory>
 
@@ -142,6 +143,8 @@ std::string receive(const std::string &payload) {
       if (root["features"].is<JsonArray>())
         for (JsonVariant feature : root["features"].as<JsonArray>())
           if (feature.is<const char *>() && std::string(feature.as<const char *>()) == "pictures") app_reads_questions = true;
+      // A hello opens a new session: the word of a sensor the old one told is not known any more, the app tells it again.
+      screen_standby::the().sensor_lost(esphome::millis());
       const uint64_t random = (uint64_t{esphome::random_uint32()} << 32) | esphome::random_uint32();
       result = "Session:" + protocol_key(transfer.grant(request, random));
       return true;
@@ -569,6 +572,23 @@ std::string receive(const std::string &payload) {
         camera_map_sheet(next);
       }
       camera_answer(view, entity, url, number);
+      result = model.ready() ? "Synced" : "Loading tiles";
+      return true;
+    }();
+    if (op == "sensor") return [&]() __attribute__((noinline)) -> bool {
+      // The word of the entity that holds the standby (app next, firmware next, screen_saver.py): "on" is 1, 0 or null
+      // when the app does not know it, "m" what the screen does a delay after off ("saver" or "off", the glass dark) and
+      // "d" that delay in seconds, 0 to 600. The standby follows it (screen_standby.h).
+      screen_standby::Sensor word;
+      if (root["on"].isNull()) word = screen_standby::Sensor::UNKNOWN;
+      else if (root["on"].is<int>() && root["on"].as<int>() == 1) word = screen_standby::Sensor::ON;
+      else if (root["on"].is<int>() && root["on"].as<int>() == 0) word = screen_standby::Sensor::OFF;
+      else return false;
+      const std::string kind = string(root["m"], 8);
+      if (kind != "saver" && kind != "off") return false;
+      if (!root["d"].is<int>() || root["d"].as<int>() < 0 || root["d"].as<int>() > 600) return false;
+      screen_standby::the().sensor(word, kind == "saver" ? screen_standby::Empty::SAVER : screen_standby::Empty::DARK,
+                                   (uint32_t) root["d"].as<int>() * 1000, esphome::millis());
       result = model.ready() ? "Synced" : "Loading tiles";
       return true;
     }();

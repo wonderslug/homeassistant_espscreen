@@ -288,6 +288,8 @@ esphome:
             };
             glass.home_after = []() -> uint32_t { return runtime_tiles::auto_home ? (uint32_t) runtime_tiles::auto_home_seconds : 0; };
             glass.standby_level = []() { return runtime_tiles::standby_level(); };
+            // Whether the app is alive: a standby that follows a sensor lets go of its word when the app goes silent.
+            glass.app_alive = []() { return runtime_tiles::feed_alive(); };
             // One owner for the backlight's level, the board's script set_backlight (features/backlight.yaml).
             glass.light = [](int level, int ms) { id(set_backlight).execute(level, ms); };
             glass.overlay = [](bool shown) {
@@ -794,6 +796,9 @@ api:
                     // saver_photos (app 0.4.89): the screensaver's photos step, a folder of Home Assistant's media, one photo
                     // after the other over the whole glass. Only a board that draws pictures shows them.
                     if (runtime_tiles::camera_supported()) features.add("saver_photos");
+                    // sensor_standby (app next, firmware next): the standby follows an on and off entity, `op sensor`.
+                    // Only a board whose screen can go dark.
+                    if (settings_screen::can_standby) features.add("sensor_standby");
                     // speaker_groups (firmware 0.26.0+, app speakers.py): a player's speakers with a key to join or leave
                     // the group and each one's volume, its inputs behind a key of their own, and the speaker it follows.
                     features.add("speaker_groups");
