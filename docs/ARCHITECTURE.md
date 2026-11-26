@@ -241,7 +241,7 @@ scripts `wake_display`, `wake_from`, `standby_key`, `standby_by_hand` and `go_ho
 board's key and a feature use. One script, `standby_wait`, is the timer of every wait in it (the loop's next pass, the
 power saving of a dark screen): the file keeps the moments and asks for the soonest.
 
-A presence sensor's word (`sensor()`: on, off or unknown, what an empty room shows and a delay) is one more way in and out there: on holds the screen lit, off sends it to standby after the delay, and the add-on's silence makes it unknown again.
+A presence sensor's word (`sensor()`: on, off or unknown, what an empty room shows and a delay) is one more way in and out there: on wakes the screen and lets Auto standby's time run (its standby an ordinary one), off sends it to standby after the delay (dark with Screen off, with Auto standby on or off), and the add-on's silence makes it unknown again.
 
 Change a rule of the standby in that file, with its case in the test. The state is private to it: the YAML asks
 (`screen_standby::the().in_standby()`) and calls a function. The kinds of wake that are no finger are one named list
