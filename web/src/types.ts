@@ -216,9 +216,13 @@ export type SaverPluginSetting = { options: Record<string, PluginValue>; entity:
 // the screen's own). `plugins`: the options and entity of each plugin face or step, by its key.
 export type ScreensaverChoice = { show: boolean; media: string; camera: string; order: SaverStep[]; off: SaverStep[]; weather?: string; more?: string[]; items?: HeaderItem[];
   face?: "digital" | "glass" | "classic" | "bauhaus" | PluginSaverKey; numerals?: number; seconds?: boolean; look?: "dark" | "light" | "auto";
-  photos?: SaverPhotos; media_face?: "" | PluginSaverKey; photos_face?: "" | PluginSaverKey; plugins?: Record<string, SaverPluginSetting> };
+  photos?: SaverPhotos; media_face?: "" | PluginSaverKey; photos_face?: "" | PluginSaverKey; plugins?: Record<string, SaverPluginSetting>;
+  // Standby from a sensor (docs/SCREENSAVER.md): the entity ('' for none), what the empty room shows, and the seconds it waits.
+  sensor?: string; sensor_off?: "saver" | "off"; sensor_delay?: number };
 // `faces`: the screen's board has the clock's faces (docs/MODULES.md). `photos_step`: the screen's firmware takes the photos step.
-export type ScreensaverView = ScreensaverChoice & { ready: boolean; pictures: boolean; standby: boolean; faces?: boolean; photos_step?: boolean };
+export type ScreensaverView = ScreensaverChoice & { ready: boolean; pictures: boolean; standby: boolean; faces?: boolean; photos_step?: boolean;
+  // `sensor_ready`: the screen's firmware takes a sensor for its standby.
+  sensor_ready?: boolean };
 export type SettingsView = { owner: string; keys: string[]; values: Record<string, any>; unavailable: string[]; rotations?: number[]; switches?: string[]; calibrate?: boolean };
 // The two ways a screen can hang (app 0.2.107), chosen when it is built: lying down or standing up. A board's own
 // numbers for each way come from boards.json, which the add-on serves with the firmware status.

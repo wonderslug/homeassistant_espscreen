@@ -29,6 +29,9 @@ export const SAVER_ICONS: Record<SaverKind, string> = { media: "F075A", photos: 
 // The order of a screen that chose none, as the add-on's screen_saver.KINDS.
 export const SAVER_ORDER: SaverKind[] = ["media", "photos", "camera", "clock"];
 // Steps of plugins in the order, and plugin faces and steps with options kept, at most (screen_saver.PLUGIN_STEPS, PLUGIN_SETTINGS).
+// Standby from a sensor: what the entity can be (an on and off state) and the delays the add-on takes (SENSOR_DELAYS there).
+export const SENSOR_DOMAINS = ["binary_sensor", "input_boolean", "switch"] as const;
+export const SENSOR_DELAYS = [0, 15, 30, 60, 120, 300, 600] as const;
 export const PLUGIN_STEPS_MAX = 4;
 export const PLUGIN_SETTINGS_MAX = 8;
 // The photos step (screen_saver.PHOTOS_DEFAULT and its choices): seconds a photo stands, the order and the fit.
@@ -214,6 +217,21 @@ export const useScreensaverStore = defineStore("screensaver", () => {
       .map((e) => ({ id: e.id, name: e.name, area: e.area || "" }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
+  // ---- Standby from a sensor ----
+  const sensorChoices = computed(() => inv.inventory.entities
+    .filter((e) => (SENSOR_DOMAINS as readonly string[]).includes(e.id.split(".")[0]))
+    .map((e) => ({ id: e.id, name: e.name, hint: e.area || "" }))
+    .sort((a, b) => a.name.localeCompare(b.name)));
+  const sensorDelayLabel = (seconds: number) => t(key(seconds === 0 ? "sensor.now" : `sensor.delay_${seconds}`));
+  function sensorSummary(): { text: string; missing?: boolean } {
+    const choice = saver.value;
+    if (!choice?.sensor) return { text: t(key("sensor.none")) };
+    const kind = choice.sensor_off === "off" ? "off" : "saver";
+    const delay = choice.sensor_delay ?? 60;
+    return { text: delay === 0 ? t(key(`sensor.summary_${kind}_now`), { name: entities.entityName(choice.sensor) })
+      : t(key(`sensor.summary_${kind}`), { name: entities.entityName(choice.sensor), delay: sensorDelayLabel(delay) }) };
+  }
+  const setSensor = (patch: Pick<Partial<ScreensaverChoice>, "sensor" | "sensor_off" | "sensor_delay">) => changeSaver(patch);
   const cameraChoices = computed(() => [
     ["", t(key("choose_camera"))] as const,
     ...entitiesOf("camera").map((e) => [e.id, e.area ? `${e.name} · ${e.area}` : e.name] as const),
@@ -325,12 +343,12 @@ export const useScreensaverStore = defineStore("screensaver", () => {
   });
 
   return {
-    saver, saverReady, standbyOn, savedOrder, players, cameraChoices, weatherChoices, saverItems, weatherSource, glassRatio, clockPreview,
+    saver, saverReady, standbyOn, sensorChoices, savedOrder, players, cameraChoices, weatherChoices, saverItems, weatherSource, glassRatio, clockPreview,
     facesHere, face, glassSize, faceDark, photosHere, photos, folderTitles, pluginSteps, addableSteps, canAddStep, clockPluginFace,
     // What the card and the drawers read as they draw (stores/lookup.ts).
-    ...lookups({ isOn, stepsShown, stepPlace, entityPlace, entitiesOf, summary, stepLabel, stepIcon, pluginHere, pluginSetting, pluginValues,
+    ...lookups({ sensorSummary, sensorDelayLabel, isOn, stepsShown, stepPlace, entityPlace, entitiesOf, summary, stepLabel, stepIcon, pluginHere, pluginSetting, pluginValues,
       facesFor, faceOf, faceName, folderTitle }),
-    changeSaver, toggleStep, moveStep, setOrder, setPlayers, addPlayer, removePlayer, setSaverItems, addPluginStep, removePluginStep,
+    changeSaver, setSensor, toggleStep, moveStep, setOrder, setPlayers, addPlayer, removePlayer, setSaverItems, addPluginStep, removePluginStep,
     setPluginOption, setPluginEntity, setFace, setPhotos, browseFolder,
     addSaverItem: saverList.add, updateSaverItem: saverList.update, moveSaverItem: saverList.move, removeSaverItem: saverList.remove,
   };
