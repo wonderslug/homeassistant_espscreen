@@ -20,13 +20,23 @@
 // sensed wake for QUIET_MS, and the next one lights the screen, someone came. Each one it holds starts the quiet
 // again. The screen cannot know that motion stopped, only that no wake came. Any wake ends the hold.
 //
+// A third way in and out, from a sensor (sensor()): an on and off entity the add-on follows and tells the screen, as a
+// word of three, on, off or unknown (Sensor), with what an empty room shows (Empty: the screensaver or the dark) and a
+// delay. On holds the screen lit: no standby by time, however long. Off sends it to standby one delay after the later of
+// the turn to off and the last touch, with Auto standby on or off. The next on wakes it at once, and a standby by hand
+// only when the sensor was off for the whole delay since that standby began, so someone walking away from the glass
+// they just put to sleep does not light it again (the quiet of a sensed wake is not used for this one). The first word
+// after unknown is no turn. The word lost (sensor_lost(), or the add-on's feed gone quiet, Glass::app_alive) is unknown
+// again: a lit screen counts the standby time from then, a standby stays as it is. Only a sensor standby of the dark
+// kind goes to level 0.
+//
 // Every standby shows the screensaver while the backlight is still lit (show(), a level above 0), a standby by hand
 // too. It opens last: the cards close and page 1 comes first, and from inside the API's call (Home Assistant's Sleep)
 // page 1 is built one pass of the loop later, where the loop task's stack has the room (docs/ARCHITECTURE.md, "The
 // loop's stack"); a screensaver that opened before it was closed by it again (GitHub #457).
 //
 // Two clocks. The standby time counts from the last touch, wake, alert that ended or Auto standby turned on
-// (since_touch). Back to page 1 counts from the last touch or page Home Assistant opened (since_use), so a wake on every
+// (since_touch; with the sensor off, the delay counts from the later of that and the turn to off). Back to page 1 counts from the last touch or page Home Assistant opened (since_use), so a wake on every
 // motion holds no card or second page up.
 //
 // Free of LVGL and ESPHome. packages/core.yaml binds the glass at boot (`the().glass`), its scripts and entities call
@@ -62,6 +72,10 @@ constexpr Wake kind_of(Asker who, bool sensed) {
   return sensed ? Wake::SENSED : who == Asker::PLUGIN ? Wake::EVENT : Wake::REMOTE;
 }
 
+// A sensor's word, and what an empty room shows (sensor()).
+enum class Sensor : uint8_t { UNKNOWN, OFF, ON };
+enum class Empty : uint8_t { SAVER, DARK };
+
 // What holds the glass lit and keeps a standby away (Glass::owned).
 enum Owner : uint8_t { CALIBRATION = 1, ALERT = 2, RING = 4 };
 
@@ -73,6 +87,7 @@ struct Glass {
   bool (*away)() = []() { return false; };            // a card, the settings page or another page than page 1 is up
   uint32_t (*home_after)() = []() -> uint32_t { return 0; };  // Back to page 1 after so many seconds; 0: off
   int (*standby_level)() = []() { return 0; };        // the backlight's level in standby now (night or day)
+  bool (*app_alive)() = []() { return true; };        // the add-on's feed is alive (a sensor's word is believed only then)
 
   void (*light)(int, int) = [](int, int) {};          // the backlight to a level (percent), over so many ms
   void (*overlay)(bool) = [](bool) {};                // the sheet over a screen in standby that takes the waking tap
@@ -94,6 +109,8 @@ class Standby {
   // ---- what the screen is doing: to read, never to write ----
   bool in_standby() const { return dimmed_; }  // the backlight at its standby level, which may be 0
   bool by_hand() const { return hand_; }       // that standby was asked for by hand
+  bool by_sensor() const { return by_sensor_; }  // that standby was started by the sensor
+  Sensor sensor_word() const { return sensor_; }
   bool touched() const { return finger_; }     // a finger is on the glass
   uint32_t since_touch(uint32_t now) const { return now - last_touch_; }  // the standby clock
   uint32_t since_use(uint32_t now) const { return now - last_use_; }      // the page clock
@@ -114,8 +131,8 @@ class Standby {
   // The backlight, the power saving of a dark screen, the sheet that takes the waking tap and, last, the screensaver.
   // Auto standby turned off lights a screen the time dimmed, never one someone sent to standby by hand.
   void show() {
-    if (dimmed_ && !screen_settings::current.standby_enabled && !hand_) dimmed_ = false;
-    const int level = dimmed_ ? glass.standby_level() : static_cast<int>(screen_settings::current.brightness);
+    if (dimmed_ && !screen_settings::current.standby_enabled && !hand_ && !by_sensor_) dimmed_ = false;
+    const int level = dimmed_ ? (by_sensor_ && dark_ ? 0 : glass.standby_level()) : static_cast<int>(screen_settings::current.brightness);
     glass.light(level, dimmed_ ? FADE_OUT_MS : FADE_IN_MS);
     // Dark (a level of 0): the power saving of screen_power.h, once the backlight has faded out. ESPHome puts its own
     // Wi-Fi mode back when it connects again, so a screen that is saving dozes again here, within the minute.
@@ -141,6 +158,7 @@ class Standby {
     last_touch_ = now;
     dimmed_ = false;
     hand_ = false;
+    by_sensor_ = false;
   }
 
   // The one way every wake takes. From a screensaver the light is up at once: a finger on it must see that it was
@@ -225,12 +243,43 @@ class Standby {
     return true;
   }
 
+  // ---- the sensor ----
+  // The sensor's word, with what an empty room shows and the delay after off. A new kind or delay is kept for the next
+  // standby; the one in progress keeps its own.
+  void sensor(Sensor word, Empty kind, uint32_t delay_ms, uint32_t now) {
+    const Sensor was = sensor_;
+    sensor_ = word;
+    empty_ = kind;
+    delay_ms_ = delay_ms;
+    if (word == was) return;
+    if (word == Sensor::OFF) off_at_ = now;  // from unknown or from on: the delay counts from here
+    if (word == Sensor::ON && was == Sensor::OFF) {
+      if (!dimmed_) {
+        stir(now);
+      } else if (!hand_ || now - later_of(off_at_, hand_at_) >= delay_ms_) {
+        glass.say("Wake from the sensor, screen in standby");
+        wake(now);
+        page_1_when_due(now);
+      } else {
+        glass.say("Wake from the sensor held: standby by hand");
+      }
+    } else if (word == Sensor::UNKNOWN && !dimmed_) {
+      stir(now);
+    }
+  }
+  // The word is lost: unknown, with the kind and the delay kept.
+  void sensor_lost(uint32_t now) { sensor(Sensor::UNKNOWN, empty_, delay_ms_, now); }
+
   // ---- time ----
   // Every second: the standby time ran out (Auto standby on, and no finger, calibration, alert or doorbell's ring
   // holds the screen lit), and Back to page 1.
   void tick(uint32_t now) {
     const auto &settings = screen_settings::current;
-    if (settings.standby_enabled && !dimmed_ && !finger_ && !glass.owned() &&
+    if (sensor_ != Sensor::UNKNOWN && !glass.app_alive()) sensor_lost(now);
+    if (sensor_ == Sensor::OFF) {
+      const uint32_t since = now - later_of(off_at_, last_touch_);
+      if (!dimmed_ && !finger_ && !glass.owned() && since >= delay_ms_) enter(false, now, true);
+    } else if (sensor_ == Sensor::UNKNOWN && settings.standby_enabled && !dimmed_ && !finger_ && !glass.owned() &&
         now - last_touch_ > static_cast<uint32_t>(settings.standby_seconds) * 1000UL) {
       enter(false, now);
     }
@@ -257,6 +306,11 @@ class Standby {
 
  private:
   bool dimmed_ = false, hand_ = false, finger_ = false;
+  Sensor sensor_ = Sensor::UNKNOWN;
+  Empty empty_ = Empty::SAVER;
+  uint32_t delay_ms_ = 60000, off_at_ = 0, hand_at_ = 0;
+  bool by_sensor_ = false;  // the standby now was started by the sensor
+  bool dark_ = false;       // ... and goes dark: the kind it started with
   uint32_t last_touch_ = 0, last_use_ = 0;
   uint32_t sensed_at_ = 0;      // the standby by hand, or the last sensed wake it held
   bool landing_ = false;        // a standby waits one pass for page 1, then shows itself
@@ -267,6 +321,7 @@ class Standby {
   one_timer::Waits<WAITS> waits_;
   bool sorting_ = false;  // inside due(): it asks once, at its end
 
+  static uint32_t later_of(uint32_t a, uint32_t b) { return static_cast<int32_t>(a - b) > 0 ? a : b; }
   void ask(uint32_t now) { waits_.ask(now, glass.later); }
   void wait(Wait which, uint32_t ms, uint32_t now) {
     waits_.set(which, ms, now);
@@ -284,12 +339,14 @@ class Standby {
 
   // The settings page and every card close; with Back to page 1 on standby the screen goes home too, one pass later
   // (the head of this file), and only then shows itself. A board whose screen cannot go dark has no standby at all.
-  void enter(bool hand, uint32_t now) {
+  void enter(bool hand, uint32_t now, bool by_sensor = false) {
     if (!glass.can_standby()) return;
     dimmed_ = true;
+    by_sensor_ = by_sensor;
+    dark_ = by_sensor && empty_ == Empty::DARK;
     if (hand) {
       hand_ = true;
-      sensed_at_ = now;
+      hand_at_ = sensed_at_ = now;
     }
     if (screen_settings::current.home_on_standby) {
       landing_ = true;

@@ -17,6 +17,7 @@ static bool is_away = false, can = true, saver_up = false;
 static uint32_t home_seconds = 0;
 static int level = 20;
 static int alerts_closed = 0;
+static bool alive = true;  // the add-on's feed to the sensor is alive
 static Standby s;  // the standby of the case that runs
 
 static void told(const std::string &what) { trail.push_back(what); }
@@ -49,6 +50,7 @@ static void fresh() {
   home_seconds = 0;
   level = 20;
   alerts_closed = 0;
+  alive = true;
   screen_settings::current = {};
   screen_power::saving = screen_power::touching = screen_power::settling = screen_power::was_tap = false;
   screen_power::freeze = [](bool on) { told(on ? "freeze" : "draw"); };
@@ -73,6 +75,7 @@ static void fresh() {
   s.glass.apply = []() { told("apply"); s.show(); };
   s.glass.later = [](uint32_t ms) { timer_set = true; timer_at = now_ms + ms; };
   s.glass.say = [](const char *line) { log_lines.push_back(line); };
+  s.glass.app_alive = []() { return alive; };
 }
 // When the two clocks last started.
 static uint32_t touch_at() { return now_ms - s.since_touch(now_ms); }
@@ -659,6 +662,102 @@ static void the_clocks() {
   assert(touch_at() == now_ms && use_at() == used);
 }
 
+static void the_sensor_holds_and_lets_go() {
+  // On: no standby by time, however long.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);  // the first word: no turn, the delay counts from now
+  s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
+  after(3600 * 1000); s.tick(now_ms);
+  assert(!s.in_standby());
+  // Off: standby one delay later, not before; a touch in between counts the delay from the touch.
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  after(30000); s.touch(now_ms);
+  after(59999); s.tick(now_ms);
+  assert(!s.in_standby());
+  after(1); s.tick(now_ms); pass();
+  assert(s.in_standby() && s.by_sensor() && has("light 20 in 1500"));
+  // The turn to on wakes it at once.
+  s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
+  assert(!s.in_standby() && !s.by_sensor());
+  // A flapping sensor while in use: the delay counts from the last turn to off.
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms); after(50000);
+  s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms); after(5000);
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms); after(59000); s.tick(now_ms);
+  assert(!s.in_standby());
+  // Auto standby off: the sensor still sends it to standby, and show() does not light it again.
+  fresh();
+  screen_settings::current.standby_enabled = false;
+  s.sensor(Sensor::OFF, Empty::SAVER, 0, now_ms);
+  after(1); s.tick(now_ms); pass(); s.show();
+  assert(s.in_standby());
+}
+
+static void the_empty_room_can_be_dark() {
+  fresh();
+  s.sensor(Sensor::OFF, Empty::DARK, 0, now_ms);
+  after(1); s.tick(now_ms); pass();
+  assert(s.in_standby() && has("light 0 in 1500") && !saver_up);
+  // A standby by hand keeps the standby level, whatever the kind.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::DARK, 60000, now_ms);
+  s.standby_by_hand("Home Assistant's Sleep", now_ms); pass();
+  assert(has("light 20 in 1500"));
+}
+
+static void a_standby_by_hand_and_the_sensor() {
+  // Sleep while someone is there: the sensor's quick off and on as they walk away is ignored.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
+  s.standby_by_hand("Home Assistant's Sleep", now_ms); pass();
+  after(3000); s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  after(4000); s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
+  assert(s.in_standby() && logged("Wake from the sensor held: standby by hand"));
+  // Off for the whole delay, then on: someone came.
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  after(60000); s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
+  assert(!s.in_standby());
+  // Already off when the standby by hand began: the count starts at the standby.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  after(120000); s.standby_by_hand("the board's key", now_ms); pass();
+  after(10000); s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
+  assert(s.in_standby());
+}
+
+static void the_sensor_word_lost() {
+  // Unknown to on wakes nothing.
+  fresh();
+  s.standby_by_time(now_ms); pass();
+  s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
+  assert(s.in_standby());
+  // A lit screen held by on falls back to the timer, counted from the loss, not from the last touch.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
+  after(3600 * 1000);
+  alive = false; s.tick(now_ms);
+  assert(s.sensor_word() == Sensor::UNKNOWN && !s.in_standby() && touch_at() == now_ms);
+  after(600 * 1000 + 1); s.tick(now_ms); pass();
+  assert(s.in_standby() && !s.by_sensor());
+  // A dark sensor standby stays dark when the word is lost.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::DARK, 0, now_ms);
+  after(1); s.tick(now_ms); pass();
+  s.sensor_lost(now_ms); s.show();
+  assert(s.in_standby() && s.by_sensor() && trail.back() != "light 20 in 1500");
+}
+
+static void the_sensor_respects_what_holds_the_glass() {
+  fresh();
+  s.sensor(Sensor::OFF, Empty::SAVER, 0, now_ms);
+  owners = ALERT;
+  after(10000); s.tick(now_ms);
+  assert(!s.in_standby());
+  owners = 0; s.tick(now_ms); pass();
+  assert(s.in_standby());
+}
+
 int main() {
   the_standby_time();
   a_dark_standby_saves_power();
@@ -674,5 +773,10 @@ int main() {
   the_home_key_held();
   back_to_page_1();
   the_clocks();
+  the_sensor_holds_and_lets_go();
+  the_empty_room_can_be_dark();
+  a_standby_by_hand_and_the_sensor();
+  the_sensor_word_lost();
+  the_sensor_respects_what_holds_the_glass();
   std::puts("screen_standby ok");
 }
