@@ -76,7 +76,14 @@ NUMERALS = (0, 4, 12)
 # it belongs to (a step of a plugin of an entity), {key: {'options': {...}, 'entity': ''}}.
 DEFAULT = {'show': False, 'media': '', 'camera': '', 'order': list(KINDS), 'off': [], 'weather': 'auto', 'more': [],
            'items': [], 'face': 'digital', 'numerals': 4, 'seconds': True, 'look': 'dark', 'photos': dict(PHOTOS_DEFAULT),
-           'media_face': '', 'photos_face': '', 'plugins': {}}
+           'media_face': '', 'photos_face': '', 'plugins': {}, 'sensor': '', 'sensor_off': 'saver', 'sensor_delay': 60}
+# The standby follows an on and off entity (docs/superpowers/specs/2026-11-25-sensor-standby-design.md): held lit while
+# it is on, to standby (the screensaver or the glass off) `sensor_delay` seconds after it goes off. A screen whose hello
+# lists the feature hears its word as `{'op': 'sensor', 'on': 1|0|None, 'm': 'saver'|'off', 'd': seconds}`.
+SENSOR_FEATURE = 'sensor_standby'
+SENSOR_DOMAINS = ('binary_sensor', 'input_boolean', 'switch')
+SENSOR_OFF = ('saver', 'off')
+SENSOR_DELAYS = (0, 15, 30, 60, 120, 300, 600)
 ITEMS_MAX = 4
 MORE_PLAYERS = 3
 ENTITY = re.compile(r'[a-z0-9_]+\.[a-z0-9_]+')
@@ -132,6 +139,21 @@ def validate(value):
         result['photos'] = valid_photos(value['photos'])
     if 'plugins' in value:
         result['plugins'] = valid_plugins(value['plugins'])
+    if 'sensor' in value:
+        sensor = value['sensor']
+        if not isinstance(sensor, str) or (sensor and (len(sensor) > 120 or not ENTITY.fullmatch(sensor)
+                                                       or sensor.split('.')[0] not in SENSOR_DOMAINS)):
+            raise ValueError('screensaver sensor')
+        result['sensor'] = sensor
+    if 'sensor_off' in value:
+        if value['sensor_off'] not in SENSOR_OFF:
+            raise ValueError('screensaver sensor_off')
+        result['sensor_off'] = value['sensor_off']
+    if 'sensor_delay' in value:
+        if isinstance(value['sensor_delay'], bool) or not isinstance(value['sensor_delay'], int) \
+                or value['sensor_delay'] not in SENSOR_DELAYS:
+            raise ValueError('screensaver sensor_delay')
+        result['sensor_delay'] = value['sensor_delay']
     if 'seconds' in value:
         if not isinstance(value['seconds'], bool):
             raise ValueError('screensaver seconds')
@@ -295,7 +317,17 @@ def entities(choice, states=None):
     # The entities of plugin steps and faces (a weather radar of a weather entity): followed as a tile's are.
     owned = {setting['entity'] for setting in (choice.get('plugins') or {}).values() if setting.get('entity')} \
         if choice.get('show') else set()
-    return found | ({weather} if weather else set()) | shown | owned
+    # The standby's sensor is followed whatever `show` says: the standby itself does not need the screensaver.
+    sensor = {choice['sensor']} if choice.get('sensor') else set()
+    return found | ({weather} if weather else set()) | shown | owned | sensor
+
+
+def sensor_message(choice, states):
+    """What the screen's standby hears of its sensor: on 1, off 0, anything else (unavailable, unknown, no state, no
+    sensor) None, with the way it goes to standby and the delay."""
+    state = ((states or {}).get(choice.get('sensor') or '') or {}).get('state')
+    return {'op': 'sensor', 'on': 1 if state == 'on' else 0 if state == 'off' else None,
+            'm': choice['sensor_off'], 'd': choice['sensor_delay']}
 
 
 def available(kind, choice, states, pictures, keys=False, now=None, held='', broken=(), photos=None, plugins=None):

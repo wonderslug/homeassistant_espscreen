@@ -36,7 +36,8 @@ PLAYING = {'state': 'playing', 'attributes': {'friendly_name': 'Living room', 'm
 DOOR = {'state': 'idle', 'attributes': {'friendly_name': 'Front door'}}
 CHOICE = {'show': True, 'media': PLAYER, 'camera': CAMERA, 'order': ['media', 'photos', 'camera', 'clock'], 'off': [], 'weather': 'auto', 'more': [], 'items': [],
           'face': 'digital', 'numerals': 4, 'seconds': True, 'look': 'dark',
-          'photos': {'source': '', 'every': 60, 'order': 'shuffle', 'fit': 'auto', 'motion': 'still'}, 'media_face': '', 'photos_face': '', 'plugins': {}}
+          'photos': {'source': '', 'every': 60, 'order': 'shuffle', 'fit': 'auto', 'motion': 'still'}, 'media_face': '', 'photos_face': '', 'plugins': {},
+          'sensor': '', 'sensor_off': 'saver', 'sensor_delay': 60}
 
 
 class Choice(unittest.TestCase):
@@ -53,6 +54,27 @@ class Choice(unittest.TestCase):
         self.assertEqual(screen_saver.validate({'camera': 'image.doorbell'})['camera'], 'image.doorbell')
         # What is off keeps the order's order.
         self.assertEqual(screen_saver.validate({'order': ['clock', 'camera', 'media'], 'off': ['media', 'clock']})['off'], ['clock', 'media'])
+
+    def test_a_sensor_is_checked(self):
+        choice = screen_saver.validate({'sensor': 'binary_sensor.hall_presence', 'sensor_off': 'off', 'sensor_delay': 120})
+        self.assertEqual((choice['sensor'], choice['sensor_off'], choice['sensor_delay']), ('binary_sensor.hall_presence', 'off', 120))
+        self.assertEqual((screen_saver.DEFAULT['sensor'], screen_saver.DEFAULT['sensor_off'], screen_saver.DEFAULT['sensor_delay']), ('', 'saver', 60))
+        for bad in ({'sensor': 'sensor.hall_lux'}, {'sensor': 'person.someone'}, {'sensor_off': 'dark'},
+                    {'sensor_delay': 45}, {'sensor_delay': True}, {'sensor': 'Binary_Sensor.x'}):
+            with self.assertRaises(ValueError):
+                screen_saver.validate(bad)
+        for entity in ('input_boolean.guest_mode', 'switch.tv_power'):
+            self.assertEqual(screen_saver.validate({'sensor': entity})['sensor'], entity)
+
+    def test_the_sensor_word(self):
+        choice = screen_saver.validate({'sensor': 'binary_sensor.hall_presence'})
+        word = lambda state: screen_saver.sensor_message(choice, {'binary_sensor.hall_presence': {'state': state}} if state else {})['on']
+        self.assertEqual([word('on'), word('off'), word('unavailable'), word('unknown'), word(None)], [1, 0, None, None, None])
+        self.assertEqual(screen_saver.sensor_message(dict(screen_saver.DEFAULT), {}), {'op': 'sensor', 'on': None, 'm': 'saver', 'd': 60})
+
+    def test_the_sensor_is_followed_without_the_screensaver(self):
+        choice = screen_saver.validate({'show': False, 'sensor': 'binary_sensor.hall_presence'})
+        self.assertIn('binary_sensor.hall_presence', screen_saver.entities(choice, {}))
 
     def test_the_first_step_that_is_available(self):
         states = {PLAYER: PLAYING, CAMERA: DOOR}
@@ -431,6 +453,58 @@ class TheApp(unittest.IsolatedAsyncioTestCase):
             m.savers.set('d1', {})
             await m.sync_saver('text.d1_tiles', screen)
             self.assertEqual(len(sent), count)
+
+    async def test_the_screen_hears_the_sensor_once_per_change_and_per_session(self):
+        sensor = 'binary_sensor.hall_presence'
+        with tempfile.TemporaryDirectory() as tmp:
+            ha = self.ha()
+            ha.states[sensor] = {'state': 'on'}
+            m = Manager(with_screen_grid(ha), Path(tmp) / 'screens.json')
+            seed_layout(m, 'text.d1_tiles', validate_layout({'title': 'Hall', 'tiles': [{'entity': 'light.hall', 'name': 'Hall'}]}))
+            sent, fail = [], []
+
+            class Sender:
+                protocol, session, confirmed = 2, 'S1', 'R1'
+                features = {screen_saver.FEATURE, screen_saver.SENSOR_FEATURE}
+
+                async def auxiliary(self, message, *, session, revision):
+                    if fail:
+                        fail.pop()
+                        raise TimeoutError
+                    sent.append((dict(message), session, revision))
+                    return True
+            m.page_senders['text.d1_tiles'] = sender = Sender()
+            screen = m.screen('text.d1_tiles')
+            m.savers.set('d1', {'sensor': sensor})
+            self.assertIn(sensor, m.watched_entities())
+            await m.sync_sensor('text.d1_tiles', screen)
+            await m.sync_sensor('text.d1_tiles', screen)
+            self.assertEqual(sent, [({'op': 'sensor', 'on': 1, 'm': 'saver', 'd': 60}, 'S1', 'R1')])
+            ha.states[sensor] = {'state': 'off'}
+            await m.sync_sensor('text.d1_tiles', screen)
+            await m.sync_sensor('text.d1_tiles', screen)
+            self.assertEqual([s[0]['on'] for s in sent], [1, 0])
+            sender.session = 'S2'
+            await m.sync_sensor('text.d1_tiles', screen)
+            self.assertEqual((len(sent), sent[-1][1], sent[-1][0]['on']), (3, 'S2', 0), 'a new session hears it again')
+            # A delivery that fails is tried again on the next call.
+            ha.states[sensor] = {'state': 'on'}
+            fail.append(1)
+            await m.sync_sensor('text.d1_tiles', screen)
+            self.assertEqual(len(sent), 3)
+            await m.sync_sensor('text.d1_tiles', screen)
+            self.assertEqual((len(sent), sent[-1][0]['on']), (4, 1))
+            # The inventory says whether the screen takes it.
+            ready = lambda: screen_saver.SENSOR_FEATURE in (getattr(m.page_senders.get('text.d1_tiles'), 'features', None) or ())
+            self.assertTrue(ready())
+            # A screen whose hello lacks the feature hears nothing.
+            count = len(sent)
+            sender.features = {screen_saver.FEATURE}
+            sender.session = 'S3'
+            ha.states[sensor] = {'state': 'off'}
+            await m.sync_sensor('text.d1_tiles', screen)
+            self.assertEqual(len(sent), count)
+            self.assertFalse(ready())
 
     async def test_a_cover_that_does_not_come_gives_the_glass_to_the_next_step(self):
         """GitHub #229: the cover cannot be fetched, the screen hears there is none and then the next step; a word whose

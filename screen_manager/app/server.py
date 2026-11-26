@@ -1220,6 +1220,7 @@ class Manager:
         # each screen holds, by its session: a screen that starts a new session gets it again.
         self.savers = screen_saver.ScreenSavers(self.path.parent / 'screensavers.json')
         self.saver_sent = {}
+        self.sensor_sent = {}  # the standby sensor's word each screen last heard, by inbox
         self.saver_shown = {}  # the player each screen's screensaver shows, by inbox
         # The photos step (app 0.4.89, saver_photos.py): a folder of Home Assistant's media, walked per screen.
         self.photos = saver_photos.Photos(lambda kind, **data: self.ha.request(kind, **data),
@@ -3837,6 +3838,7 @@ class Manager:
                     if await self.sync_one(inbox, self.layouts[inbox], force, screen, dirty):
                         changed = True
                     await self.sync_saver(inbox, screen)
+                    await self.sync_sensor(inbox, screen)
                     if pings and inbox in self.sent and now - self.pinged.get(inbox, 0) >= KEEPALIVE_SECONDS:
                         await self.ping(inbox, screen)
                 except Exception as error:
@@ -4013,6 +4015,27 @@ class Manager:
             self.saver_sent[inbox] = key
             self.saver_shown[inbox] = message.get('e', '') if message['k'] == 'media' else ''
             LOG.info('Screensaver on %s: %s', screen.get('name', inbox), message['k'] or 'dark')
+
+    async def sync_sensor(self, inbox, screen):
+        """Tell a screen that takes a standby sensor (its hello lists it) what its sensor says, whenever that changes and
+        once in every new session; delivered as the screensaver's word is, and tried again after a failure."""
+        sender = self.page_senders.get(inbox)
+        if not sender or sender.protocol != 2 or not sender.confirmed \
+                or screen_saver.SENSOR_FEATURE not in (getattr(sender, 'features', None) or ()):
+            return
+        message = screen_saver.sensor_message(self.saver_choice(screen), self.ha.states)
+        key = (sender.session, json.dumps(message, sort_keys=True))
+        if self.sensor_sent.get(inbox) == key:
+            return
+        try:
+            delivered = await sender.auxiliary(message, session=sender.session, revision=sender.confirmed)
+        except Exception as error:
+            self.sensor_sent.pop(inbox, None)
+            LOG.info('Sensor standby for %s not delivered (%s)', screen.get('name', inbox), type(error).__name__)
+            return
+        if delivered:
+            self.sensor_sent[inbox] = key
+            LOG.info('Sensor standby on %s: %s', screen.get('name', inbox), message['on'])
 
     # ----- pictures (docs/PICTURES.md): every question a screen asks, answered by one service -----
     async def answer_camera(self, request):
@@ -5215,7 +5238,9 @@ def create_app(manager, development=False):
                                      'faces': has_module(screen, screen_saver.MODULE),
                                      # The photos step where the screen's firmware takes it (app 0.4.89); `photos` is the
                                      # choice's own folder, pace, order and fit.
-                                     'photos_step': screen_saver.PHOTOS_FEATURE in (getattr(manager.page_senders.get(screen['id']), 'features', None) or ())}
+                                     'photos_step': screen_saver.PHOTOS_FEATURE in (getattr(manager.page_senders.get(screen['id']), 'features', None) or ()),
+                                     # The standby's sensor where the screen's firmware takes it.
+                                     'sensor_ready': screen_saver.SENSOR_FEATURE in (getattr(manager.page_senders.get(screen['id']), 'features', None) or ())}
             # The delivery and our own word for a screen that reports nothing, in the editor's language (app 0.2.90).
             status = manager.status.get(screen['id'])
             word = PAGE_DELIVERY_WORDS.get(status) if isinstance(status, str) else None
