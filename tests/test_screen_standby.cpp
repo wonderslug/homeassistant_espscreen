@@ -662,13 +662,34 @@ static void the_clocks() {
   assert(touch_at() == now_ms && use_at() == used);
 }
 
-static void the_sensor_holds_and_lets_go() {
-  // On: no standby by time, however long.
+static void the_sensor_wakes_and_the_timer_runs() {
+  // On: the timer runs, and its standby is an ordinary one, never the dark kind.
   fresh();
-  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);  // the first word: no turn, the delay counts from now
+  s.sensor(Sensor::OFF, Empty::DARK, 60000, now_ms);
+  s.sensor(Sensor::ON, Empty::DARK, 60000, now_ms);
+  after(600 * 1000); s.tick(now_ms);
+  assert(!s.in_standby());
+  after(1); s.tick(now_ms); pass();
+  assert(s.in_standby() && !s.by_sensor() && has("light 20 in 1500"));
+  // Still on: no turn, it stays; off and then on wakes it.
+  s.sensor(Sensor::ON, Empty::DARK, 60000, now_ms);
+  assert(s.in_standby());
+  s.sensor(Sensor::OFF, Empty::DARK, 60000, now_ms);
+  s.sensor(Sensor::ON, Empty::DARK, 60000, now_ms);
+  assert(!s.in_standby());
+  // Auto standby off with the sensor on: lit however long; off still gives the room-empty standby.
+  fresh();
+  screen_settings::current.standby_enabled = false;
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
   s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
   after(3600 * 1000); s.tick(now_ms);
   assert(!s.in_standby());
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  after(60000); s.tick(now_ms); pass();
+  assert(s.in_standby() && s.by_sensor());
+  fresh();
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
   // Off: standby one delay later, not before; a touch in between counts the delay from the touch.
   s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
   after(30000); s.touch(now_ms);
@@ -868,7 +889,7 @@ int main() {
   the_home_key_held();
   back_to_page_1();
   the_clocks();
-  the_sensor_holds_and_lets_go();
+  the_sensor_wakes_and_the_timer_runs();
   the_empty_room_can_be_dark();
   a_standby_by_hand_and_the_sensor();
   the_sensor_word_lost();

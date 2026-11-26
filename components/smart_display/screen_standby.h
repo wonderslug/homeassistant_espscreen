@@ -22,8 +22,8 @@
 //
 // A third way in and out, from a sensor (sensor()): an on and off entity the add-on follows and tells the screen, as a
 // word of three, on, off or unknown (Sensor), with what an empty room shows (Empty: the screensaver or the dark) and a
-// delay. On holds the screen lit: no standby by time, however long. Off sends it to standby one delay after the later of
-// the turn to off and the last touch, with Auto standby on or off; a touch holds it lit at least TOUCH_HOLD_MS, so a
+// delay. On wakes the screen and lets Auto standby's time run, as with no word, and its standby is an ordinary one
+// (never the dark kind, never the sensor's). Off sends it to standby one delay after the later of the turn to off and the last touch, with Auto standby on or off; a touch holds it lit at least TOUCH_HOLD_MS, so a
 // delay of 0 leaves someone the time to use it. The next on wakes it at once, and a standby by hand
 // only when the sensor was off for the whole delay since that standby began, so someone walking away from the glass
 // they just put to sleep does not light it again (the quiet of a sensed wake is not used for this one). The first word
@@ -288,8 +288,8 @@ class Standby {
 
   // ---- time ----
   // Every second: the standby time ran out (Auto standby on, and no finger, calibration, alert or doorbell's ring
-  // holds the screen lit), and Back to page 1. With a sensor's word the sensor decides instead: on holds the screen lit,
-  // off sends it to standby one delay after the later of the turn and the last touch (Auto standby on or off).
+  // holds the screen lit), and Back to page 1. With the sensor's word off the sensor decides instead (on counts
+  // like unknown): off sends it to standby one delay after the later of the turn and the last touch (Auto standby on or off).
   void tick(uint32_t now) {
     const auto &settings = screen_settings::current;
     if (sensor_ != Sensor::UNKNOWN && !glass.app_alive()) sensor_lost(now);
@@ -297,7 +297,7 @@ class Standby {
       // Elapsed times, never timestamps compared: they hold across the wrap of the clock (49 days).
       const bool empty = now - off_at_ >= delay_ms_ && now - last_touch_ >= std::max(delay_ms_, TOUCH_HOLD_MS);
       if (!dimmed_ && !finger_ && !glass.owned() && empty) enter(false, now, true);
-    } else if (sensor_ == Sensor::UNKNOWN && settings.standby_enabled && !dimmed_ && !finger_ && !glass.owned() &&
+    } else if (settings.standby_enabled && !dimmed_ && !finger_ && !glass.owned() &&
         now - last_touch_ > static_cast<uint32_t>(settings.standby_seconds) * 1000UL) {
       enter(false, now);
     }
