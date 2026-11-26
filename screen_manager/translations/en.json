@@ -2991,8 +2991,6 @@
         "photos_motion_still_hint": "Each photo stands still.",
         "photos_motion_slow_hint": "A photo that fills the glass moves slowly across it, a pixel at a time. The 10-inch screens keep their photos still: a larger photo does not fit their memory.",
         "sensor": {
-          "title": "Standby from a sensor",
-          "none": "Off",
           "entity": "Sensor",
           "delay": "Standby when it turns off",
           "screen_off": "Screen off",
@@ -3007,11 +3005,7 @@
           "delay_120": "2 min",
           "delay_300": "5 min",
           "delay_600": "10 min",
-          "summary_saver": "{name} · Screensaver after {delay}",
-          "summary_off": "{name} · Screen off after {delay}",
-          "summary_saver_now": "{name} · Screensaver right away",
-          "summary_off_now": "{name} · Screen off right away",
-          "hint": "While the sensor is on, the screen stays lit. When it turns off, the screen waits, then goes to standby. When it turns on again, the screen wakes.",
+          "hint": "When the sensor turns on, the screen wakes and Auto standby's time runs as usual. When it turns off, the screen goes to standby after this delay, also with Auto standby off.",
           "needs_firmware": "Update this screen to use a sensor for its standby.",
           "missing": "The sensor no longer exists. Choose another."
         }

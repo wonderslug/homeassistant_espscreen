@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Standby from a sensor, as three rows of the Standby card (docs/SCREENSAVER.md): the Sensor (the one entity whose word
 // starts and ends the standby), and once one is chosen how long the screen waits after it turns off, and Screen off
-// (the empty room goes dark instead of showing the screensaver). The store holds the rules (sensorChoices, sensorSummary,
+// (the empty room goes dark instead of showing the screensaver). The store holds the rules (sensorChoices, sensorMissing,
 // setSensor); the add-on watches the entity and sends its word to the screen. Same row markup as SettingRows.
 import { computed } from "vue";
 import { t } from "../i18n";
@@ -21,7 +21,6 @@ const shown = computed(() => Boolean(saver.value?.standby));
 const ready = computed(() => Boolean(saver.value?.sensor_ready));
 const sensor = computed(() => saver.value?.sensor || "");
 const items = computed(() => screensaver.sensorChoices.filter((item) => item.id !== sensor.value));
-const line = computed(() => screensaver.sensorSummary());
 const delays = computed<[number, string][]>(() => SENSOR_DELAYS.map((seconds) => [seconds, screensaver.sensorDelayLabel(seconds)]));
 const screenOff = computed(() => saver.value?.sensor_off === "off");
 </script>
@@ -33,15 +32,18 @@ const screenOff = computed(() => saver.value?.sensor_off === "off");
       <div class="s-control">
         <UiPicker :items="items" :placeholder="T('search')" :empty="T('empty')" align="end" @pick="(id: string) => screensaver.setSensor({ sensor: id })">
           <template #trigger>
-            <button type="button" class="ghost-btn" id="saver-sensor-entity" aria-labelledby="saver-sensor-label" :disabled="!ready">
-              <Icon v-if="!sensor" name="plus" /><span class="sensor-name">{{ sensor ? entities.entityName(sensor) : T("choose") }}</span>
-            </button>
+            <!-- Its name is what it shows (the sensor, or Choose a sensor); the row's label describes it. Chosen, it reads as
+                 a setting's value, as a select of the next row does. -->
+            <button v-if="sensor" type="button" class="ui-select sensor-pick" id="saver-sensor-entity" aria-describedby="saver-sensor-label"
+              :disabled="!ready"><span class="sensor-name">{{ entities.entityName(sensor) }}</span><Icon name="chevron-down" /></button>
+            <button v-else type="button" class="ghost-btn sensor-pick" id="saver-sensor-entity" aria-describedby="saver-sensor-label"
+              :disabled="!ready"><Icon name="plus" /><span class="sensor-name">{{ T("choose") }}</span></button>
           </template>
         </UiPicker>
-        <button v-if="sensor" type="button" class="x" :aria-label="T('clear')" :disabled="!ready" @click="screensaver.setSensor({ sensor: '' })"><Icon name="close" /></button>
+        <button v-if="sensor" type="button" class="sensor-clear" :aria-label="T('clear')" :disabled="!ready" @click="screensaver.setSensor({ sensor: '' })"><Icon name="close" /></button>
       </div>
     </div>
-    <p v-if="sensor && line.missing" class="hint missing" id="saver-sensor-missing">{{ line.text }}</p>
+    <p v-if="screensaver.sensorMissing" class="hint missing" id="saver-sensor-missing">{{ T("missing") }}</p>
     <p v-if="!ready" class="hint" id="saver-sensor-firmware">{{ T("needs_firmware") }}</p>
     <template v-if="sensor">
       <div class="srow" :class="{ inactive: !ready }" data-setting="sensor-delay">
@@ -65,6 +67,11 @@ const screenOff = computed(() => saver.value?.sensor_off === "off");
 
 <style scoped>
 .sensor-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.s-control { gap: 6px; }
-.hint.missing { color: var(--danger, #c0392b); }
+.s-control { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sensor-pick { width: auto; min-width: 0; }
+.ghost-btn.sensor-pick { padding: 7px 11px; }
+/* The clear button, as a chip's own (.item .x in app.css). */
+.sensor-clear { color: var(--muted); width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; flex: none; font-size: 15px; }
+.sensor-clear:hover:not(:disabled) { color: var(--danger); background: var(--danger-soft); }
+.hint.missing { color: var(--danger); }
 </style>

@@ -140,5 +140,11 @@ describe("standby from a sensor", () => {
     wrapper = mount(ScreensaverCard);
     expect(wrapper.text()).toContain(hint);
     expect(show(wrapper)).toBe(true);
+    // Firmware that takes no sensor never reaches the screensaver that way.
+    useScreenStore().currentScreen!.screensaver = saver({ ...sensor, sensor_off: "saver", sensor_ready: false });
+    wrapper = mount(ScreensaverCard);
+    expect(wrapper.text()).toContain(hint);
+    expect(show(wrapper)).toBe(true);
+    expect(useScreensaverStore().saverReachable).toBe(false);
   });
 });

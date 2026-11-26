@@ -1,5 +1,5 @@
 // Standby from a sensor in the Standby card (docs/SCREENSAVER.md): a Sensor row, and once one is chosen the delay and a
-// Screen off switch. The store holds the logic (sensorChoices, sensorSummary, setSensor); the rows only draw it.
+// Screen off switch. The store holds the logic (sensorChoices, sensorMissing, setSensor); the rows only draw it.
 import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import UiSelect from "../src/components/ui/UiSelect.vue";
@@ -10,6 +10,7 @@ import { router } from "../src/router";
 import type { Inventory, ScreensaverView } from "../src/types";
 import { useInventoryStore } from "../src/stores/inventory";
 import { useScreenStore } from "../src/stores/screen";
+import { useScreensaverStore } from "../src/stores/screensaver";
 
 const saver = (patch: Partial<ScreensaverView> = {}): ScreensaverView => ({
   show: true, media: "", more: [], camera: "", order: ["media", "camera", "clock"], off: [],
@@ -103,7 +104,28 @@ describe("standby from a sensor in the Standby card", () => {
   it("marks a sensor Home Assistant no longer has", () => {
     give({ ...sensor, sensor: "binary_sensor.gone" });
     const wrapper = mount(SensorStandbyRows);
+    expect(useScreensaverStore().sensorMissing).toBe(true);
     expect(wrapper.find(".missing").text()).toBe("The sensor no longer exists. Choose another.");
+    give(sensor);
+    expect(useScreensaverStore().sensorMissing).toBe(false);
+    give({ sensor: "" });
+    expect(useScreensaverStore().sensorMissing).toBe(false);
+  });
+
+  it("names its picker by what it shows, and shows a chosen sensor as a setting's value", async () => {
+    const wrapper = mount(SensorStandbyRows);
+    let pick = wrapper.find("#saver-sensor-entity");
+    expect(pick.attributes("aria-labelledby")).toBeUndefined();
+    expect(pick.attributes("aria-describedby")).toBe("saver-sensor-label");
+    expect(pick.find(".sensor-name").text()).toBe("Choose a sensor");
+    expect(pick.classes()).toContain("ghost-btn");
+    give(sensor);
+    await flushPromises();
+    pick = wrapper.find("#saver-sensor-entity");
+    expect(pick.find(".sensor-name").text()).toBe("Hall presence");
+    expect(pick.classes()).toContain("ui-select");
+    expect(pick.classes()).not.toContain("ghost-btn");
+    expect(wrapper.find("button.sensor-clear").exists()).toBe(true);
   });
 
   it("needs new firmware, and is not there on a screen without standby", () => {

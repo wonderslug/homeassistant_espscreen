@@ -76,7 +76,9 @@ export const useScreensaverStore = defineStore("screensaver", () => {
   const isOn = (step: SaverStep) => !saver.value?.off.includes(step);
   // The screensaver can come at all: by Auto standby, or by a sensor whose empty room shows it (with Screen off the
   // sensor's standby is dark, so Auto standby is still what would bring it).
-  const saverReachable = computed(() => standbyOn.value || Boolean(saver.value?.sensor && saver.value.sensor_off !== "off"));
+  // Firmware that takes no sensor (sensor_ready false) never reaches it that way.
+  const saverReachable = computed(() => standbyOn.value
+    || Boolean(saver.value?.sensor && saver.value.sensor_ready && saver.value.sensor_off !== "off"));
 
   function changeSaver(patch: Partial<ScreensaverChoice>) {
     if (scr.currentScreen) scr.setScreensaver(scr.currentScreen, patch);
@@ -226,16 +228,11 @@ export const useScreensaverStore = defineStore("screensaver", () => {
     .map((e) => ({ id: e.id, name: e.name, hint: e.area || "" }))
     .sort((a, b) => a.name.localeCompare(b.name)));
   const sensorDelayLabel = (seconds: number) => t(key(seconds === 0 ? "sensor.now" : `sensor.delay_${seconds}`));
-  function sensorSummary(): { text: string; missing?: boolean } {
-    const choice = saver.value;
-    if (!choice?.sensor) return { text: t(key("sensor.none")) };
-    // A sensor Home Assistant no longer has (once the entities are known): marked, as a step that lacks its entity.
-    if (inv.inventory.entities.length && !inv.entityOf(choice.sensor)) return { text: t(key("sensor.missing")), missing: true };
-    const kind = choice.sensor_off === "off" ? "off" : "saver";
-    const delay = choice.sensor_delay ?? 60;
-    return { text: delay === 0 ? t(key(`sensor.summary_${kind}_now`), { name: entities.entityName(choice.sensor) })
-      : t(key(`sensor.summary_${kind}`), { name: entities.entityName(choice.sensor), delay: sensorDelayLabel(delay) }) };
-  }
+  // A sensor Home Assistant no longer has (once the entities are known): marked, as a step that lacks its entity.
+  const sensorMissing = computed(() => {
+    const id = saver.value?.sensor;
+    return Boolean(id && inv.inventory.entities.length && !inv.entityOf(id));
+  });
   const setSensor = (patch: Pick<Partial<ScreensaverChoice>, "sensor" | "sensor_off" | "sensor_delay">) => changeSaver(patch);
   const cameraChoices = computed(() => [
     ["", t(key("choose_camera"))] as const,
@@ -348,10 +345,10 @@ export const useScreensaverStore = defineStore("screensaver", () => {
   });
 
   return {
-    saver, saverReady, standbyOn, saverReachable, sensorChoices, savedOrder, players, cameraChoices, weatherChoices, saverItems, weatherSource, glassRatio, clockPreview,
+    saver, saverReady, standbyOn, saverReachable, sensorChoices, sensorMissing, savedOrder, players, cameraChoices, weatherChoices, saverItems, weatherSource, glassRatio, clockPreview,
     facesHere, face, glassSize, faceDark, photosHere, photos, folderTitles, pluginSteps, addableSteps, canAddStep, clockPluginFace,
     // What the card and the drawers read as they draw (stores/lookup.ts).
-    ...lookups({ sensorSummary, sensorDelayLabel, isOn, stepsShown, stepPlace, entityPlace, entitiesOf, summary, stepLabel, stepIcon, pluginHere, pluginSetting, pluginValues,
+    ...lookups({ sensorDelayLabel, isOn, stepsShown, stepPlace, entityPlace, entitiesOf, summary, stepLabel, stepIcon, pluginHere, pluginSetting, pluginValues,
       facesFor, faceOf, faceName, folderTitle }),
     changeSaver, setSensor, toggleStep, moveStep, setOrder, setPlayers, addPlayer, removePlayer, setSaverItems, addPluginStep, removePluginStep,
     setPluginOption, setPluginEntity, setFace, setPhotos, browseFolder,
