@@ -48,6 +48,33 @@ goes first, whatever its place in the list, with one exception: the player you p
 for two minutes, so its play key is still there. Ten minutes after the pause the screensaver moves on to the next step,
 the camera or the clock, since a speaker stays paused in Home Assistant for days.
 
+## Standby from a sensor
+
+A screen can follow a presence sensor instead of the clock alone: it stays lit while someone is in the room and goes
+to standby a little after the room is empty. It needs an app from the next release and firmware that lists
+`sensor_standby`, on a board that goes into standby.
+
+1. In the **Screensaver** card, open the row **Standby from a sensor** and choose a sensor under **Sensor**. It can be a
+   `binary_sensor` such as `binary_sensor.hall_presence`, an `input_boolean` or a `switch`. The row's line then reads,
+   for example, "Hall presence, Screensaver after 1 min". **Remove the sensor** turns it off again.
+2. Under **When it turns off** choose what the empty room shows: **Screensaver** (the standby as it always was, with
+   the screensaver if it is on) or **Screen off** (the glass goes dark).
+3. Under **After** choose how long the screen waits once the sensor is off: **Right away**, 15 s, 30 s, 1 min, 2 min,
+   5 min or 10 min.
+
+While the sensor is on, the screen stays lit, however long nobody touches it. When the sensor turns off, the screen
+goes to standby after the delay, counted from the turn to off or the last touch, whichever is later. This works with
+Auto standby on or off. When the sensor turns on again, the screen wakes at once.
+
+- **Sleep** in Home Assistant, the board's key and the home key held still send the screen to standby at once. While
+  the sensor is on, the screen stays there, and the sensor's next turn to on does not wake it, so someone walking away
+  from a screen they just put to sleep does not light it again. It wakes at the sensor's turn to on only when the sensor
+  was off for the whole delay since that standby began. A touch wakes it as always.
+- A sensor that is unavailable, unknown or gone counts as no word: a lit screen counts the standby time from then, as
+  without a sensor, and a screen in standby stays there.
+- A screen on older firmware shows the row with **Update this screen to use a sensor for its standby.** and keeps its
+  usual standby.
+
 ## What you see
 
 - **Music playing**: the cover over the whole glass, with the title and the artist small at the bottom left. On a screen
@@ -182,6 +209,17 @@ has.
   `web/src/composables/useSortableRows.ts`.
   `SaverGlass.vue` draws the clock in the glass's proportions, and drops the last entities of its line until it fits, as
   the screen does.
+- **Standby from a sensor** (`screen_manager/app/screen_saver.py`, `components/smart_display/screen_standby.h`). The
+  choice holds `sensor` (an entity of `binary_sensor`, `input_boolean` or `switch`, or empty), `sensor_off` (`saver` or
+  `off`) and `sensor_delay` (0, 15, 30, 60, 120, 300 or 600 seconds). The app follows the sensor whatever Show in
+  standby says (`watched_entities`) and `server.sync_sensor` sends `sensor_message` to a screen whose hello lists
+  `sensor_standby` (`SENSOR_FEATURE`; the inventory's `sensor_ready` tells the editor): `{"op": "sensor", "on": 1 | 0 |
+  null, "m": "saver" | "off", "d": seconds}`, `on` being null for any state that is not on or off. It goes once per
+  change and once in every new session. The screen hands it to `screen_standby::Standby::sensor` (`page_receiver.cpp`),
+  which holds the glass lit while the sensor is on and sends it to standby one delay after the later of the turn to off
+  and the last touch. A hello or an add-on that went silent calls `sensor_lost`, which makes the word unknown again. Only
+  the "Screen off" kind goes to level 0. `tests/test_screen_standby.cpp` runs each rule, and `tests/test_screen_saver.py`
+  the choice and the message. The editor's row is in `ScreensaverCard.vue` and its drawer `SaverSensorInspector.vue`.
 - **The pick.** The app follows the chosen players and camera like a tile's entities (`watched_entities`). After every
   pass of a screen it works out the first step that is on and available (`screen_saver.pick`): the first player of the
   list (`media`, then `more`, `screen_saver.player`) whose state is `playing` with an `entity_picture`, a camera whose state is not `unavailable` or `unknown`, the clock always. A
