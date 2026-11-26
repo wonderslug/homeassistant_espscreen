@@ -62,12 +62,13 @@ firmware that lists `sensor_standby`, on a board that goes into standby.
 3. **Screen off** chooses what the empty room shows: off, the standby as it always was, with the screensaver if it is
    on; on, the glass goes dark.
 
-When the sensor turns on, the screen wakes if it was in standby. After that the sensor does nothing more: Auto standby's
-time runs as it does without a sensor, and the standby it brings is an ordinary one, never the dark kind. When the
-sensor turns off, the screen goes to standby after the delay, counted from the turn to off or the last touch, whichever
-is later, dark if **Screen off** is on and an ordinary standby with the screensaver if not. This works with Auto
-standby on or off. While the room is empty, a touch keeps the screen lit for at least 30 seconds, also with **Right
-away**, so someone who touches it has the time to use it.
+When the sensor turns on, the screen wakes if it was in standby. While it stays on the sensor does nothing more: Auto
+standby's time runs as it does without a sensor, and the standby it brings is an ordinary one, never the dark kind. When
+the sensor turns off, the screen goes to standby after the delay, counted from the turn to off or the last touch,
+whichever is later, dark if **Screen off** is on and an ordinary standby with the screensaver if not. This works with
+Auto standby on or off. With **Screen off** on, a standby that began while someone was there turns dark once the room
+has been empty for the delay. While the room is empty, a touch keeps the screen lit for at least 30 seconds, also with
+**Right away**, so someone who touches it has the time to use it.
 
 - **Sleep** in Home Assistant, the board's key and the home key held still send the screen to standby at once. The
   sensor's next turn to on does not wake it, so someone walking away from a screen they just put to sleep does not
@@ -222,12 +223,15 @@ has.
   null, "m": "saver" | "off", "d": seconds}`, `on` being null for any state that is not on or off. It goes once per
   change and once in every new session. The screen hands it to `screen_standby::Standby::sensor` (`page_receiver.cpp`),
   which wakes the screen at the turn to on and lets Auto standby's time run, and sends it to standby one delay after
-  the later of the turn to off and the last touch, with Auto standby on or off, never sooner than `TOUCH_HOLD_MS` (30 s) after a touch. A hello or an add-on that went silent calls
-  `sensor_lost`, which makes the word unknown again. Only the "Screen off" kind goes to level 0, and a standby by hand
-  asked on such a standby stays there. `Standby::level_now()` and `dark()` are the one answer to the backlight's level:
-  the power saving, the tiles' pictures in standby and the Psram Largest Block sensor go by them. Every clock is
-  compared as elapsed time, so the wrap of the millisecond clock after 49 days changes nothing. `tests/test_screen_standby.cpp` runs each rule, and `tests/test_screen_saver.py`
-  the choice and the message. The editor's rows are `SensorStandbyRows.vue`, in the Standby card.
+  the later of the turn to off and the last touch, with Auto standby on or off, never sooner than `TOUCH_HOLD_MS`
+  (30 s) after a touch. With "Screen off", a standby of the timer that began with someone there is turned dark by the
+  same rule where it is (`darken`), without page 1 or the cards closing again; a standby by hand keeps its level. A
+  hello or an add-on that went silent calls `sensor_lost`, which makes the word unknown again. Only the "Screen off"
+  kind goes to level 0, and a standby by hand asked on such a standby stays there. `Standby::level_now()` and `dark()`
+  are the one answer to the backlight's level: the power saving, the tiles' pictures in standby and the Psram Largest
+  Block sensor go by them. Every clock is compared as elapsed time, so the wrap of the millisecond clock after 49 days
+  changes nothing. `tests/test_screen_standby.cpp` runs each rule, and `tests/test_screen_saver.py` the choice and the
+  message. The editor's rows are `SensorStandbyRows.vue`, in the Standby card.
 - **The pick.** The app follows the chosen players and camera like a tile's entities (`watched_entities`). After every
   pass of a screen it works out the first step that is on and available (`screen_saver.pick`): the first player of the
   list (`media`, then `more`, `screen_saver.player`) whose state is `playing` with an `entity_picture`, a camera whose state is not `unavailable` or `unknown`, the clock always. A
