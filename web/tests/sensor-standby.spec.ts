@@ -44,7 +44,7 @@ describe("standby from a sensor in the Standby card", () => {
     const tab = mount(SettingsTab, { attachTo: document.body });
     const card = tab.findAll(".set-card").find((c) => c.find('[data-setting="standby_enabled"]').exists())!;
     expect(card.find('[data-setting="sensor-standby"]').exists()).toBe(true);
-    expect(card.find('[data-setting="sensor-standby"]').text()).toContain("Sensor");
+    expect(card.find('[data-setting="sensor-standby"]').text()).toContain("Sensor standby");
     expect(mount(ScreensaverCard).find('[data-setting="sensor-standby"]').exists()).toBe(false);
     expect(mount(ScreensaverCard).find('[data-setting="saver-sensor"]').exists()).toBe(false);
     tab.unmount();

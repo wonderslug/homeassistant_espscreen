@@ -54,7 +54,7 @@ A screen can follow a presence sensor as well as the clock: when the sensor turn
 turns off, the screen goes to standby a little after the room is empty. It needs an app from the next release and
 firmware that lists `sensor_standby`, on a board that goes into standby.
 
-1. In the **Standby** card of the screen's settings, under **Auto standby**, choose a sensor in the **Sensor** row. It
+1. In the **Standby** card of the screen's settings, under **Auto standby**, choose a sensor in the **Sensor standby** row. It
    can be a `binary_sensor` such as `binary_sensor.hall_presence`, an `input_boolean` or a `switch`. **Remove the
    sensor** turns it off again.
 2. Once a sensor is chosen, **Standby when it turns off** says how long the screen waits after the sensor is off:
@@ -78,7 +78,7 @@ has been empty for the delay. While the room is empty, a touch keeps the screen 
 - After the app or Home Assistant restarts, a screen in standby wakes at the sensor's next turn to on, or a touch.
 - A sensor that is unavailable, unknown or gone counts as no word: a lit screen counts the standby time from then, as
   without a sensor, and a screen in standby stays there.
-- A screen on older firmware shows **Update this screen to use a sensor for its standby.** under the Sensor row and
+- A screen on older firmware shows **Update this screen to use a sensor for its standby.** under the Sensor standby row and
   keeps its usual standby.
 
 ## What you see

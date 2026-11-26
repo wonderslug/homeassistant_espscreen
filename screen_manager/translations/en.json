@@ -2991,7 +2991,7 @@
         "photos_motion_still_hint": "Each photo stands still.",
         "photos_motion_slow_hint": "A photo that fills the glass moves slowly across it, a pixel at a time. The 10-inch screens keep their photos still: a larger photo does not fit their memory.",
         "sensor": {
-          "entity": "Sensor",
+          "entity": "Sensor standby",
           "delay": "Standby when it turns off",
           "screen_off": "Screen off",
           "choose": "Choose a sensor",
