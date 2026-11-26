@@ -494,9 +494,6 @@ class TheApp(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(sent), 3)
             await m.sync_sensor('text.d1_tiles', screen)
             self.assertEqual((len(sent), sent[-1][0]['on']), (4, 1))
-            # The inventory says whether the screen takes it.
-            ready = lambda: screen_saver.SENSOR_FEATURE in (getattr(m.page_senders.get('text.d1_tiles'), 'features', None) or ())
-            self.assertTrue(ready())
             # A screen whose hello lacks the feature hears nothing.
             count = len(sent)
             sender.features = {screen_saver.FEATURE}
@@ -504,7 +501,32 @@ class TheApp(unittest.IsolatedAsyncioTestCase):
             ha.states[sensor] = {'state': 'off'}
             await m.sync_sensor('text.d1_tiles', screen)
             self.assertEqual(len(sent), count)
-            self.assertFalse(ready())
+
+    async def test_the_inventory_says_whether_the_screen_takes_a_sensor_also_while_it_is_offline(self):
+        """`sensor_ready` goes by the features the screen last said (Sender.known_features): an offline screen on new
+        firmware keeps its Standby from a sensor row, and a hello without the feature takes it away."""
+        from aiohttp.test_utils import TestClient, TestServer
+        from server import create_app
+        with tempfile.TemporaryDirectory() as tmp:
+            m = Manager(with_screen_grid(self.ha()), Path(tmp) / 'screens.json')
+            seed_layout(m, 'text.d1_tiles', validate_layout({'title': 'Hall', 'tiles': [{'entity': 'light.hall', 'name': 'Hall'}]}))
+            sender = m.page_sender('text.d1_tiles', m.screen('text.d1_tiles'))
+            async with TestClient(TestServer(create_app(m, True))) as client:
+                async def ready():
+                    light = await (await client.get('/api/inventory?light=1')).json()
+                    return light['screens'][0]['screensaver']['sensor_ready']
+                self.assertFalse(await ready(), 'a screen that never said')
+                # Its hello named the feature: ready while connected and after it went away.
+                sender.protocol = 2
+                sender.features = {screen_saver.FEATURE, screen_saver.SENSOR_FEATURE}
+                sender.last_features = set(sender.features)
+                self.assertTrue(await ready())
+                sender.disconnected()
+                self.assertTrue(await ready(), 'an offline screen keeps what its last hello said')
+                # A hello without it.
+                sender.protocol = 2
+                sender.features = sender.last_features = {screen_saver.FEATURE}
+                self.assertFalse(await ready())
 
     async def test_a_cover_that_does_not_come_gives_the_glass_to_the_next_step(self):
         """GitHub #229: the cover cannot be fetched, the screen hears there is none and then the next step; a word whose

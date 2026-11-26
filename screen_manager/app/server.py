@@ -5239,8 +5239,9 @@ def create_app(manager, development=False):
                                      # The photos step where the screen's firmware takes it (app 0.4.89); `photos` is the
                                      # choice's own folder, pace, order and fit.
                                      'photos_step': screen_saver.PHOTOS_FEATURE in (getattr(manager.page_senders.get(screen['id']), 'features', None) or ()),
-                                     # The standby's sensor where the screen's firmware takes it.
-                                     'sensor_ready': screen_saver.SENSOR_FEATURE in (getattr(manager.page_senders.get(screen['id']), 'features', None) or ())}
+                                     # The standby's sensor where the screen's firmware takes it, by what it last
+                                     # said: an offline screen keeps its row (Sender.known_features).
+                                     'sensor_ready': screen_saver.SENSOR_FEATURE in ((sender.known_features() if sender else None) or ())}
             # The delivery and our own word for a screen that reports nothing, in the editor's language (app 0.2.90).
             status = manager.status.get(screen['id'])
             word = PAGE_DELIVERY_WORDS.get(status) if isinstance(status, str) else None
