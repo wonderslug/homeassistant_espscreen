@@ -684,6 +684,8 @@ static void the_sensor_holds_and_lets_go() {
   s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms); after(5000);
   s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms); after(59000); s.tick(now_ms);
   assert(!s.in_standby());
+  after(1000); s.tick(now_ms); pass();
+  assert(s.in_standby() && s.by_sensor());
   // Auto standby off: the sensor still sends it to standby, and show() does not light it again.
   fresh();
   screen_settings::current.standby_enabled = false;
@@ -697,6 +699,15 @@ static void the_empty_room_can_be_dark() {
   s.sensor(Sensor::OFF, Empty::DARK, 0, now_ms);
   after(1); s.tick(now_ms); pass();
   assert(s.in_standby() && has("light 0 in 1500") && !saver_up);
+  // A new kind during the sensor standby does not show it again: the level stays until the next standby.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::SAVER, 0, now_ms);
+  after(1); s.tick(now_ms); pass();
+  assert(has("light 20 in 1500"));
+  trail.clear();
+  s.sensor(Sensor::OFF, Empty::DARK, 0, now_ms);
+  pass();
+  assert(s.in_standby() && trail.empty());
   // A standby by hand keeps the standby level, whatever the kind.
   fresh();
   s.sensor(Sensor::OFF, Empty::DARK, 60000, now_ms);
@@ -731,6 +742,12 @@ static void the_sensor_word_lost() {
   s.standby_by_time(now_ms); pass();
   s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
   assert(s.in_standby());
+  // A timer standby with a known word is woken by a real turn from off to on.
+  fresh();
+  s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
+  s.standby_by_time(now_ms); pass();
+  s.sensor(Sensor::ON, Empty::SAVER, 60000, now_ms);
+  assert(!s.in_standby() && logged("Wake from the sensor, screen in standby"));
   // A lit screen held by on falls back to the timer, counted from the loss, not from the last touch.
   fresh();
   s.sensor(Sensor::OFF, Empty::SAVER, 60000, now_ms);
@@ -744,8 +761,8 @@ static void the_sensor_word_lost() {
   fresh();
   s.sensor(Sensor::OFF, Empty::DARK, 0, now_ms);
   after(1); s.tick(now_ms); pass();
-  s.sensor_lost(now_ms); s.show();
-  assert(s.in_standby() && s.by_sensor() && trail.back() != "light 20 in 1500");
+  s.sensor_lost(now_ms); trail.clear(); s.show();
+  assert(s.in_standby() && s.by_sensor() && has("light 0 in 1500") && !has("light 20 in 1500"));
 }
 
 static void the_sensor_respects_what_holds_the_glass() {

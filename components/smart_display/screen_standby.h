@@ -36,8 +36,9 @@
 // loop's stack"); a screensaver that opened before it was closed by it again (GitHub #457).
 //
 // Two clocks. The standby time counts from the last touch, wake, alert that ended or Auto standby turned on
-// (since_touch; with the sensor off, the delay counts from the later of that and the turn to off). Back to page 1 counts from the last touch or page Home Assistant opened (since_use), so a wake on every
-// motion holds no card or second page up.
+// (since_touch; with the sensor off, the delay counts from the later of that and the turn to off). Back to page 1
+// counts from the last touch or page Home Assistant opened (since_use), so a wake on every motion holds no card or
+// second page up.
 //
 // Free of LVGL and ESPHome. packages/core.yaml binds the glass at boot (`the().glass`), its scripts and entities call
 // in, and one script of it is the timer (`later`, due()). tests/test_screen_standby.cpp runs every rule above.
@@ -129,10 +130,11 @@ class Standby {
 
   // ---- the glass follows the state ----
   // The backlight, the power saving of a dark screen, the sheet that takes the waking tap and, last, the screensaver.
-  // Auto standby turned off lights a screen the time dimmed, never one someone sent to standby by hand.
+  // Auto standby turned off lights a screen the time dimmed, never one someone sent to standby by hand or one the sensor started.
   void show() {
     if (dimmed_ && !screen_settings::current.standby_enabled && !hand_ && !by_sensor_) dimmed_ = false;
-    const int level = dimmed_ ? (by_sensor_ && dark_ ? 0 : glass.standby_level()) : static_cast<int>(screen_settings::current.brightness);
+    const int lit_level = static_cast<int>(screen_settings::current.brightness);
+    const int level = dimmed_ ? (by_sensor_ && dark_ ? 0 : glass.standby_level()) : lit_level;
     glass.light(level, dimmed_ ? FADE_OUT_MS : FADE_IN_MS);
     // Dark (a level of 0): the power saving of screen_power.h, once the backlight has faded out. ESPHome puts its own
     // Wi-Fi mode back when it connects again, so a screen that is saving dozes again here, within the minute.
@@ -272,7 +274,8 @@ class Standby {
 
   // ---- time ----
   // Every second: the standby time ran out (Auto standby on, and no finger, calibration, alert or doorbell's ring
-  // holds the screen lit), and Back to page 1.
+  // holds the screen lit), and Back to page 1. With a sensor's word the sensor decides instead: on holds the screen lit,
+  // off sends it to standby one delay after the later of the turn and the last touch (Auto standby on or off).
   void tick(uint32_t now) {
     const auto &settings = screen_settings::current;
     if (sensor_ != Sensor::UNKNOWN && !glass.app_alive()) sensor_lost(now);
