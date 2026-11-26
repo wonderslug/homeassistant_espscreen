@@ -77,7 +77,7 @@ NUMERALS = (0, 4, 12)
 DEFAULT = {'show': False, 'media': '', 'camera': '', 'order': list(KINDS), 'off': [], 'weather': 'auto', 'more': [],
            'items': [], 'face': 'digital', 'numerals': 4, 'seconds': True, 'look': 'dark', 'photos': dict(PHOTOS_DEFAULT),
            'media_face': '', 'photos_face': '', 'plugins': {}, 'sensor': '', 'sensor_off': 'saver', 'sensor_delay': 60}
-# The standby follows an on and off entity (docs/superpowers/specs/2026-11-25-sensor-standby-design.md): held lit while
+# The standby follows an on and off entity (docs/SCREENSAVER.md, "Standby from a sensor"): held lit while
 # it is on, to standby (the screensaver or the glass off) `sensor_delay` seconds after it goes off. A screen whose hello
 # lists the feature hears its word as `{'op': 'sensor', 'on': 1|0|None, 'm': 'saver'|'off', 'd': seconds}`.
 SENSOR_FEATURE = 'sensor_standby'

@@ -56,7 +56,7 @@ to standby a little after the room is empty. It needs an app from the next relea
 
 1. In the **Screensaver** card, open the row **Standby from a sensor** and choose a sensor under **Sensor**. It can be a
    `binary_sensor` such as `binary_sensor.hall_presence`, an `input_boolean` or a `switch`. The row's line then reads,
-   for example, "Hall presence, Screensaver after 1 min". **Remove the sensor** turns it off again.
+   for example, "Hall presence · Screensaver after 1 min". **Remove the sensor** turns it off again.
 2. Under **When it turns off** choose what the empty room shows: **Screensaver** (the standby as it always was, with
    the screensaver if it is on) or **Screen off** (the glass goes dark).
 3. Under **After** choose how long the screen waits once the sensor is off: **Right away**, 15 s, 30 s, 1 min, 2 min,
@@ -64,12 +64,15 @@ to standby a little after the room is empty. It needs an app from the next relea
 
 While the sensor is on, the screen stays lit, however long nobody touches it. When the sensor turns off, the screen
 goes to standby after the delay, counted from the turn to off or the last touch, whichever is later. This works with
-Auto standby on or off. When the sensor turns on again, the screen wakes at once.
+Auto standby on or off. When the sensor turns on again, the screen wakes at once. While the room is empty, a touch keeps
+the screen lit for at least 30 seconds, also with **Right away**, so someone who touches it has the time to use it.
 
 - **Sleep** in Home Assistant, the board's key and the home key held still send the screen to standby at once. While
   the sensor is on, the screen stays there, and the sensor's next turn to on does not wake it, so someone walking away
   from a screen they just put to sleep does not light it again. It wakes at the sensor's turn to on only when the sensor
-  was off for the whole delay since that standby began. A touch wakes it as always.
+  was off for the whole delay since that standby began. A touch wakes it as always. Sleep on a screen the sensor has
+  already turned off keeps it dark: it does not come up to the standby brightness.
+- After the app or Home Assistant restarts, a screen in standby wakes at the sensor's next turn to on, or a touch.
 - A sensor that is unavailable, unknown or gone counts as no word: a lit screen counts the standby time from then, as
   without a sensor, and a screen in standby stays there.
 - A screen on older firmware shows the row with **Update this screen to use a sensor for its standby.** and keeps its
@@ -217,8 +220,11 @@ has.
   null, "m": "saver" | "off", "d": seconds}`, `on` being null for any state that is not on or off. It goes once per
   change and once in every new session. The screen hands it to `screen_standby::Standby::sensor` (`page_receiver.cpp`),
   which holds the glass lit while the sensor is on and sends it to standby one delay after the later of the turn to off
-  and the last touch. A hello or an add-on that went silent calls `sensor_lost`, which makes the word unknown again. Only
-  the "Screen off" kind goes to level 0. `tests/test_screen_standby.cpp` runs each rule, and `tests/test_screen_saver.py`
+  and the last touch, never sooner than `TOUCH_HOLD_MS` (30 s) after a touch. A hello or an add-on that went silent calls
+  `sensor_lost`, which makes the word unknown again. Only the "Screen off" kind goes to level 0, and a standby by hand
+  asked on such a standby stays there. `Standby::level_now()` and `dark()` are the one answer to the backlight's level:
+  the power saving, the tiles' pictures in standby and the Psram Largest Block sensor go by them. Every clock is
+  compared as elapsed time, so the wrap of the millisecond clock after 49 days changes nothing. `tests/test_screen_standby.cpp` runs each rule, and `tests/test_screen_saver.py`
   the choice and the message. The editor's row is in `ScreensaverCard.vue` and its drawer `SaverSensorInspector.vue`.
 - **The pick.** The app follows the chosen players and camera like a tile's entities (`watched_entities`). After every
   pass of a screen it works out the first step that is on and available (`screen_saver.pick`): the first player of the
