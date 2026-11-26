@@ -74,6 +74,9 @@ export const useScreensaverStore = defineStore("screensaver", () => {
     return standby !== false && standby !== 0;
   });
   const isOn = (step: SaverStep) => !saver.value?.off.includes(step);
+  // The screensaver can come at all: by Auto standby, or by a sensor whose empty room shows it (with Screen off the
+  // sensor's standby is dark, so Auto standby is still what would bring it).
+  const saverReachable = computed(() => standbyOn.value || Boolean(saver.value?.sensor && saver.value.sensor_off !== "off"));
 
   function changeSaver(patch: Partial<ScreensaverChoice>) {
     if (scr.currentScreen) scr.setScreensaver(scr.currentScreen, patch);
@@ -226,6 +229,8 @@ export const useScreensaverStore = defineStore("screensaver", () => {
   function sensorSummary(): { text: string; missing?: boolean } {
     const choice = saver.value;
     if (!choice?.sensor) return { text: t(key("sensor.none")) };
+    // A sensor Home Assistant no longer has (once the entities are known): marked, as a step that lacks its entity.
+    if (inv.inventory.entities.length && !inv.entityOf(choice.sensor)) return { text: t(key("sensor.missing")), missing: true };
     const kind = choice.sensor_off === "off" ? "off" : "saver";
     const delay = choice.sensor_delay ?? 60;
     return { text: delay === 0 ? t(key(`sensor.summary_${kind}_now`), { name: entities.entityName(choice.sensor) })
@@ -343,7 +348,7 @@ export const useScreensaverStore = defineStore("screensaver", () => {
   });
 
   return {
-    saver, saverReady, standbyOn, sensorChoices, savedOrder, players, cameraChoices, weatherChoices, saverItems, weatherSource, glassRatio, clockPreview,
+    saver, saverReady, standbyOn, saverReachable, sensorChoices, savedOrder, players, cameraChoices, weatherChoices, saverItems, weatherSource, glassRatio, clockPreview,
     facesHere, face, glassSize, faceDark, photosHere, photos, folderTitles, pluginSteps, addableSteps, canAddStep, clockPluginFace,
     // What the card and the drawers read as they draw (stores/lookup.ts).
     ...lookups({ sensorSummary, sensorDelayLabel, isOn, stepsShown, stepPlace, entityPlace, entitiesOf, summary, stepLabel, stepIcon, pluginHere, pluginSetting, pluginValues,

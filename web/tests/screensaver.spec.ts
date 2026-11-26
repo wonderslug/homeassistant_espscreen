@@ -223,12 +223,33 @@ describe("standby from a sensor", () => {
     expect(wrapper.find('[data-setting="saver-sensor"]').exists()).toBe(false);
   });
 
-  it("drops the Auto standby hint while a sensor is set", () => {
+  it("drops the Auto standby hint, and lets Show in standby be used, while a sensor brings the screensaver", () => {
     const hint = "Turn on Auto standby to use it.";
+    const show = (wrapper: ReturnType<typeof mount>) => wrapper.find('[data-setting="screensaver"]').classes().includes("inactive");
     useScreenStore().currentScreen!.settings = { owner: "x", keys: ["standby_enabled"], values: { standby_enabled: false }, unavailable: [] };
     useScreenStore().currentScreen!.screensaver = saver({ sensor: "", sensor_ready: true });
-    expect(mount(ScreensaverCard).text()).toContain(hint);
+    let wrapper = mount(ScreensaverCard);
+    expect(wrapper.text()).toContain(hint);
+    expect(show(wrapper)).toBe(true);
+    // A sensor whose empty room shows the screensaver: the screensaver shows without Auto standby.
+    useScreenStore().currentScreen!.screensaver = saver({ ...sensor, sensor_off: "saver" });
+    wrapper = mount(ScreensaverCard);
+    expect(wrapper.text()).not.toContain(hint);
+    expect(show(wrapper)).toBe(false);
+    // One whose empty room goes dark never shows it: the hint stays, and so does the dimmed row.
+    useScreenStore().currentScreen!.screensaver = saver({ ...sensor, sensor_off: "off" });
+    wrapper = mount(ScreensaverCard);
+    expect(wrapper.text()).toContain(hint);
+    expect(show(wrapper)).toBe(true);
+  });
+
+  it("marks a sensor that is no longer among the entities", () => {
+    withEntities();
     useScreenStore().currentScreen!.screensaver = saver(sensor);
-    expect(mount(ScreensaverCard).text()).not.toContain(hint);
+    expect(useScreensaverStore().sensorSummary().missing).toBeFalsy();
+    useScreenStore().currentScreen!.screensaver = saver({ ...sensor, sensor: "binary_sensor.gone" });
+    expect(useScreensaverStore().sensorSummary()).toEqual({ text: "The sensor no longer exists. Choose another.", missing: true });
+    const small = mount(ScreensaverCard).find('[data-setting="saver-sensor"] small');
+    expect(small.classes()).toContain("missing");
   });
 });

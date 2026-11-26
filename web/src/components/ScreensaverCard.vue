@@ -47,7 +47,7 @@ function open(e: MouseEvent, kind: SaverStep) {
 <template>
   <section v-if="screensaver.saver && screensaver.saver.standby" class="set-card" id="settings-screensaver" :class="{ inactive: !screensaver.saverReady }">
     <h4><span class="mdi">{{ glyph("F04B2") }}</span>{{ t("editor.screen_settings.screensaver.title") }}</h4>
-    <div class="srow setting-toggle" :class="{ inactive: !screensaver.saverReady || !screensaver.standbyOn }" data-setting="screensaver"
+    <div class="srow setting-toggle" :class="{ inactive: !screensaver.saverReady || !screensaver.saverReachable }" data-setting="screensaver"
       @click="screensaver.saverReady && !($event.target as HTMLElement).closest('button') && screensaver.changeSaver({ show: !screensaver.saver.show })">
       <span class="s-label" id="screensaver-show-label">{{ t("editor.screen_settings.screensaver.show") }}</span>
       <div class="s-control">
@@ -56,7 +56,7 @@ function open(e: MouseEvent, kind: SaverStep) {
       </div>
     </div>
     <p v-if="!screensaver.saverReady" class="hint" id="screensaver-firmware">{{ t("editor.screen_settings.screensaver.needs_firmware", { version: SAVER_MIN_FIRMWARE }) }}</p>
-    <p v-else-if="!screensaver.standbyOn && !screensaver.saver.sensor" class="hint">{{ t("editor.screen_settings.screensaver.standby_off") }}</p>
+    <p v-else-if="!screensaver.saverReachable" class="hint">{{ t("editor.screen_settings.screensaver.standby_off") }}</p>
     <!-- Standby from a sensor (docs/SCREENSAVER.md): one row above the steps, which opens its drawer; not a step, so it neither drags nor switches. -->
     <div class="saver-list sensor-list">
       <div class="sensor-row" tabindex="0" role="button" data-setting="saver-sensor" :class="{ inactive: !screensaver.saver.sensor_ready, opened: insp.inspector?.kind === 'saver-sensor' }"

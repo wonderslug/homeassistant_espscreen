@@ -3015,7 +3015,8 @@
           "summary_saver_now": "{name} · Screensaver right away",
           "summary_off_now": "{name} · Screen off right away",
           "hint": "While the sensor is on, the screen stays lit. When it turns off, the screen waits, then goes to standby. When it turns on again, the screen wakes.",
-          "needs_firmware": "Update this screen to use a sensor for its standby."
+          "needs_firmware": "Update this screen to use a sensor for its standby.",
+          "missing": "The sensor no longer exists. Choose another."
         }
       },
       "plugins": {
