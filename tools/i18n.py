@@ -204,6 +204,8 @@ LINT_KEEP = {
     'Error: layout', 'Error: invalid layout', 'Error: incomplete layout', 'Error: insufficient layout memory',
     'Error: outdated tile or configuration in state',
     # Only a log line or the rate limiter's reason shows these.
+    # The standby's log of a wake from the sensor (screen_standby.h, the sensor wake).
+    'Wake from the sensor, screen in standby', 'Wake from the sensor held: standby by hand',
     # The live view's log of what lies over a live tile (runtime_tiles.h, drawn_over).
     'the top layer', 'the system layer', 'something on the page', 'another screen',
     # Why a live tile stops streaming (runtime_tiles.h, the live tiles' check before LVGL draws).
